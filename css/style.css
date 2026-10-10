@@ -1,0 +1,45 @@
+html, body {
+  margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #f4f6f8;
+  overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; user-select: none;
+}
+
+#top {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 2;
+  padding: calc(8px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 8px calc(8px + env(safe-area-inset-left));
+  background: #fff; box-shadow: 0 1px 4px #0002;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px;
+}
+
+#info {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 2;
+  padding: 10px calc(10px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left));
+  background: #fff; box-shadow: 0 -1px 4px #0002; font-size: 14px;
+}
+
+/* Крупные цели касания */
+button, .btn, label.chk, label.switch { min-height: 40px; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; }
+button, .btn {
+  padding: 0 14px; border: 1px solid #c5ccd3; border-radius: 8px; background: #f7f9fb;
+  font: inherit; color: #1a1a1a; cursor: pointer; touch-action: manipulation;
+}
+button:active, .btn:active { background: #e3e8ee; }
+button.active { background: #1e6fe8; border-color: #1e6fe8; color: #fff; }
+.btn input[type=file] { display: none; }
+label.chk input { width: 20px; height: 20px; }
+
+/* Тумблер 2D/3D */
+label.switch { cursor: pointer; touch-action: manipulation; }
+label.switch input { position: absolute; opacity: 0; pointer-events: none; }
+label.switch .track {
+  position: relative; width: 44px; height: 24px; border-radius: 12px; background: #9aa5b1; transition: background .15s;
+}
+label.switch .track::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; transition: transform .15s;
+}
+label.switch input:checked + .track { background: #1e6fe8; }
+label.switch input:checked + .track::after { transform: translateX(20px); }
+
+canvas { display: block; width: 100vw; height: 100vh; touch-action: none; position: absolute; top: 0; left: 0; }
+#c3 { display: none; }

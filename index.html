@@ -3,272 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Просмотр STR</title>
-<style>
-  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #f4f6f8; overflow: hidden; }
-  #top { position: fixed; top: 0; left: 0; right: 0; padding: calc(8px + env(safe-area-inset-top)) 8px 8px;
-         background: #fff; box-shadow: 0 1px 4px #0002; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; z-index: 2; font-size: 14px; }
-  #info { position: fixed; bottom: 0; left: 0; right: 0; padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
-          background: #fff; box-shadow: 0 -1px 4px #0002; font-size: 14px; z-index: 2; }
-  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
-</style>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="css/style.css">
+
+<!-- Библиотеки через CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
 </head>
 <body>
 <div id="top">
-  <input type="file" id="file">
-  <label><input type="checkbox" id="swap"> поменять X/Y</label>
+  <label class="btn">PDF <input type="file" id="filePdf" accept=".pdf,application/pdf"></label>
+  <label class="btn">STR <input type="file" id="fileStr"></label>
+  <label class="btn">TXT <input type="file" id="fileTxt"></label>
+  <label class="chk"><input type="checkbox" id="swap"> поменять X/Y</label>
+  <label class="switch"><span>2D</span><input type="checkbox" id="mode3d"><span class="track"></span><span>3D</span></label>
   <button id="fit">вписать</button>
+  <button id="georef">Привязать PDF</button>
 </div>
 <canvas id="c"></canvas>
-<div id="info">Откройте файл .str (Файлы → выбрать)</div>
+<canvas id="c3"></canvas>
+<div id="info">Откройте файл .str (кнопка STR)</div>
 
-<script>
-const cv = document.getElementById('c');
-const ctx = cv.getContext('2d');
-const infoEl = document.getElementById('info');
-const swapEl = document.getElementById('swap');
-const dpr = window.devicePixelRatio || 1;
-
-// ---------- СТИЛИ СТРИНГОВ ----------
-// kind: 'line' — линия, 'points' — только точки
-// labelZ: true — рядом с точкой подпись отметки Z
-// centerD: N — в центре контура подпись из поля DN
-const STYLES = {
-  1:   { kind: 'line',   color: '#000000', width: 1 },
-  2:   { kind: 'line',   color: '#0000ff', width: 2 },
-  3:   { kind: 'line',   color: '#33ffff', width: 1 },
-  4:   { kind: 'line',   color: '#cc6600', width: 2 },
-  5:   { kind: 'line',   color: '#ff3333', width: 1 },
-  6:   { kind: 'line',   color: '#ffff00', width: 1 },
-  7:   { kind: 'line',   color: '#ff9933', width: 1 },
-  8:   { kind: 'line',   color: '#00ff00', width: 2 },
-  103: { kind: 'points', color: '#808080', size: 1 },
-  503: { kind: 'points', color: '#000000', size: 1, labelZ: true },
-  175: { kind: 'line',   color: '#ff0000', width: 2 },
-  202: { kind: 'line',   color: '#000000', width: 2 },
-  203: { kind: 'line',   color: '#000000', width: 1 },
-  465: { kind: 'line',   color: '#ff0000', width: 2, centerD: 4 },
-  467: { kind: 'line',   color: '#0000cc', width: 2, centerD: 4 },
-};
-// Для остальных номеров — как «стринг 1» по умолчанию в Surpac
-const DEFAULT_STYLE = { kind: 'line', color: '#000000', width: 1 };
-const FONT = '"Times New Roman", Times, serif';
-
-let pts = [];        // точки: {id, x, y, z, d:[D1, D2, ...]}
-let groups = [];     // линии: подряд идущие записи с одним номером стринга
-let lastText = '';
-let view = { s: 1, cx: 0, cy: 0, ox: 0, oy: 0 };
-
-function resize() {
-  cv.width = innerWidth * dpr;
-  cv.height = innerHeight * dpr;
-  cv.style.width = innerWidth + 'px';
-  cv.style.height = innerHeight + 'px';
-  draw();
-}
-addEventListener('resize', resize);
-
-const fmtZ = z => String(Number(z.toFixed(3)));   // 801.200 -> 801.2
-
-function centroid(P) {
-  let A = 0, cx = 0, cy = 0;
-  for (let i = 0; i < P.length; i++) {
-    const p = P[i], q = P[(i + 1) % P.length];
-    const w = p.x * q.y - q.x * p.y;
-    A += w; cx += (p.x + q.x) * w; cy += (p.y + q.y) * w;
-  }
-  if (Math.abs(A) < 1e-9) {   // вырожденный контур — просто среднее
-    return { x: P.reduce((s, p) => s + p.x, 0) / P.length,
-             y: P.reduce((s, p) => s + p.y, 0) / P.length };
-  }
-  return { x: cx / (3 * A), y: cy / (3 * A) };
-}
-
-function parse(text) {
-  pts = []; groups = [];
-  const swap = swapEl.checked;
-  let cur = null;
-  const lines = text.split(/\r?\n/);
-  for (let n = 1; n < lines.length; n++) {          // строка 0 — заголовок файла
-    const f = lines[n].split(',').map(s => s.trim());
-    if (f.length < 4) continue;
-    const id = parseInt(f[0], 10);
-    if (isNaN(id)) continue;
-    if (id === 0) { cur = null; continue; }          // 0 = конец стринга
-    const a = parseFloat(f[1]), b = parseFloat(f[2]), z = parseFloat(f[3]);
-    if (isNaN(a) || isNaN(b) || isNaN(z)) continue;
-    const x = swap ? a : b;                          // в файле: Y, X, Z
-    const y = swap ? b : a;
-    if (!cur || cur.id !== id) { cur = { id, idx: [] }; groups.push(cur); }
-    cur.idx.push(pts.length);
-    pts.push({ id, x, y, z, d: f.slice(4) });        // d[0]=D1 ... d[3]=D4
-  }
-  // подпись в центре контура (D-поле) считаем один раз
-  for (const g of groups) {
-    const st = STYLES[g.id];
-    if (st && st.centerD) {
-      const P = g.idx.map(i => pts[i]);
-      g.text = P.map(p => p.d[st.centerD - 1]).find(Boolean) || '';
-      g.center = centroid(P);
-    }
-  }
-}
-
-function fit() {
-  if (!pts.length) return;
-  let mnx = Infinity, mxx = -Infinity, mny = Infinity, mxy = -Infinity;
-  for (const p of pts) {
-    mnx = Math.min(mnx, p.x); mxx = Math.max(mxx, p.x);
-    mny = Math.min(mny, p.y); mxy = Math.max(mxy, p.y);
-  }
-  view.cx = (mnx + mxx) / 2;
-  view.cy = (mny + mxy) / 2;
-  view.ox = 0; view.oy = 0;
-  const rx = (mxx - mnx) || 1, ry = (mxy - mny) || 1;
-  view.s = Math.min(innerWidth * 0.9 / rx, innerHeight * 0.7 / ry);
-}
-
-function toScreen(p) {
-  return [
-    (p.x - view.cx) * view.s + innerWidth / 2 + view.ox,
-    innerHeight / 2 - (p.y - view.cy) * view.s + view.oy
-  ];
-}
-
-function draw() {
-  const W = innerWidth, H = innerHeight;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = '#f4f6f8';
-  ctx.fillRect(0, 0, W, H);
-  ctx.lineJoin = 'round';
-
-  for (const pass of [0, 1]) {                       // 0 — линии, 1 — точки сверху
-    for (const g of groups) {
-      const st = STYLES[g.id] || DEFAULT_STYLE;
-      if ((st.kind === 'points') !== (pass === 1)) continue;
-
-      if (st.kind === 'points') {
-        ctx.fillStyle = st.color;
-        for (const i of g.idx) {
-          const p = pts[i];
-          const [sx, sy] = toScreen(p);
-          ctx.beginPath();
-          ctx.arc(sx, sy, st.size, 0, Math.PI * 2);
-          ctx.fill();
-          if (st.labelZ) {
-            ctx.font = `12px ${FONT}`;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(fmtZ(p.z), sx + st.size + 3, sy);
-          }
-        }
-      } else {
-        ctx.strokeStyle = st.color;
-        ctx.lineWidth = st.width;
-        ctx.beginPath();
-        g.idx.forEach((i, k) => {
-          const [sx, sy] = toScreen(pts[i]);
-          if (k === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
-        });
-        ctx.stroke();
-        if (g.text) {
-          const [sx, sy] = toScreen(g.center);
-          ctx.fillStyle = st.color;
-          ctx.font = `15px ${FONT}`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(g.text, sx, sy);
-        }
-      }
-    }
-  }
-}
-
-function pick(cx, cy) {
-  let best = -1, bd = 18;
-  pts.forEach((p, i) => {
-    const [sx, sy] = toScreen(p);
-    const d = Math.hypot(sx - cx, sy - cy);
-    if (d < bd) { bd = d; best = i; }
-  });
-  if (best >= 0) {
-    const p = pts[best];
-    const desc = p.d.map((v, i) => v ? `D${i + 1}=${v}` : '').filter(Boolean).join(' ');
-    infoEl.textContent =
-      `Стринг ${p.id} · X ${p.x.toFixed(3)} · Y ${p.y.toFixed(3)} · Z ${p.z.toFixed(3)}` + (desc ? ` · ${desc}` : '');
-  }
-}
-
-// Чтение файла: UTF-8, а если не получилось — Windows-1251 (кириллица из Surpac)
-async function readText(file) {
-  const buf = await file.arrayBuffer();
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
-  catch { return new TextDecoder('windows-1251').decode(buf); }
-}
-
-document.getElementById('file').addEventListener('change', async e => {
-  const f = e.target.files[0];
-  if (!f) return;
-  lastText = await readText(f);
-  parse(lastText);
-  infoEl.textContent = `${f.name}: точек ${pts.length}, линий ${groups.length}. Нажмите на точку, чтобы увидеть данные.`;
-  fit(); draw();
-});
-
-swapEl.addEventListener('change', () => {
-  if (!lastText) return;
-  parse(lastText); fit(); draw();
-});
-
-document.getElementById('fit').addEventListener('click', () => { fit(); draw(); });
-
-// Касания: один палец — сдвиг, два пальца — масштаб, короткое касание — выбор точки
-const ps = new Map();
-let pinch0 = null, moved = 0, downAt = 0;
-
-cv.addEventListener('pointerdown', e => {
-  cv.setPointerCapture(e.pointerId);
-  ps.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  moved = 0; downAt = Date.now();
-  if (ps.size === 2) {
-    const [a, b] = [...ps.values()];
-    pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y), s: view.s };
-  }
-});
-
-cv.addEventListener('pointermove', e => {
-  if (!ps.has(e.pointerId)) return;
-  const prev = ps.get(e.pointerId);
-  const cur = { x: e.clientX, y: e.clientY };
-  moved += Math.abs(cur.x - prev.x) + Math.abs(cur.y - prev.y);
-  ps.set(e.pointerId, cur);
-  if (ps.size === 1) {
-    view.ox += cur.x - prev.x;
-    view.oy += cur.y - prev.y;
-  } else if (ps.size === 2 && pinch0) {
-    const [a, b] = [...ps.values()];
-    const d = Math.hypot(a.x - b.x, a.y - b.y);
-    view.s = pinch0.s * d / pinch0.d;
-  }
-  draw();
-});
-
-function endPointer(e) {
-  const wasTap = ps.size === 1 && moved < 8 && Date.now() - downAt < 400;
-  if (wasTap) pick(e.clientX, e.clientY);
-  ps.delete(e.pointerId);
-  if (ps.size < 2) pinch0 = null;
-}
-cv.addEventListener('pointerup', endPointer);
-cv.addEventListener('pointercancel', endPointer);
-
-cv.addEventListener('wheel', e => {
-  e.preventDefault();
-  view.s *= e.deltaY < 0 ? 1.1 : 0.9;
-  draw();
-}, { passive: false });
-
-resize();
-</script>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>
