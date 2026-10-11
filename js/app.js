@@ -57,7 +57,10 @@ async function get3d() {
 async function redraw(refit) {
   if (refit) r2.fit();
   r2.draw();
-  if (mode3d) (await get3d()).build(layers);
+  if (mode3d) {
+    try { (await get3d()).build(layers); }
+    catch (err) { setInfo('3D: ' + err.message); }
+  }
 }
 
 // ---------- ЗАГРУЗКА ----------
@@ -67,7 +70,9 @@ for (const kind of ['str', 'txt']) {
     if (!f) return;
     sources[kind] = { text: await readText(f), name: f.name };
     parseLayer(kind);
-    if (layers.pdf && !layers.pdf.affine) layers.pdf.affine = defaultAffine(layers.pdf, r2.bounds());
+   if (layers.pdf && !layers.pdf.userAffine) {
+  layers.pdf.affine = defaultAffine(layers.pdf, r2.bounds());
+}
     setInfo(summary());
     redraw(true);
     e.target.value = '';
@@ -81,6 +86,7 @@ $('filePdf').addEventListener('change', async e => {
     setInfo('Загрузка PDF…');
     const pdf = await loadPdf(f);
     pdf.affine = defaultAffine(pdf, r2.bounds());
+    pdf.userAffine = false;
     layers.pdf = pdf;
     setInfo(summary());
     redraw(true);
@@ -105,6 +111,7 @@ $('mode3d').addEventListener('change', async e => {
   if (mode3d) {
     try {
       const r = await get3d();
+       if (!mode3d) return;
       r.build(layers);
       r.setEnabled(true);
     } catch (err) {
@@ -150,7 +157,7 @@ const georef = {
       return true;
     }
     const T = solveAffine(this.pairs);
-    if (T) { layers.pdf.affine = T; this.stop('PDF привязан'); redraw(false); }
+    if (T) { layers.pdf.affine = T; layers.pdf.userAffine = true; this.stop('PDF привязан'); redraw(false); }
     else this.stop('Не удалось привязать: точки совпадают');
     return true;
   },
