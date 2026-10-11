@@ -63,6 +63,14 @@ export function createRender3d({ canvas }) {
         content.add(st.kind === 'points'
           ? new THREE.Points(geom, new THREE.PointsMaterial({ color: st.color, size: 4, sizeAttenuation: false }))
           : new THREE.Line(geom, new THREE.LineBasicMaterial({ color: st.color })));
+
+        // ── Стволы скважин ──
+        for (const i of g.idx) {
+          const p = pts[i];
+          if (!p.drill) continue;
+          const stemGeom = new THREE.BufferGeometry().setFromPoints([v(p), v(p.drill.end)]);
+          content.add(new THREE.Line(stemGeom, new THREE.LineBasicMaterial({ color: st.color })));
+        }
       }
     }
     // камера: по размеру облака точек

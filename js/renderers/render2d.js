@@ -4,12 +4,24 @@ import { worldToPdf } from '../parsers/pdfOverlay.js';
 
 const FONT = '"Times New Roman", Times, serif';
 const fmtZ = z => String(Number(z.toFixed(3)));   // 801.200 -> 801.2
-const TXT_STYLE = { kind: 'points', color: '#d02020', size: 3, labelZ: true };
+const TXT_STYLE = { kind: 'points', color: '#d02020', size: 3, labelField: 'z' };
+
+/** Значение поля точки для подписи: 'z' → p.z, 'dN' → p.d[N-1]. */
+function fieldValue(p, field) {
+  if (!field) return '';
+  if (field === 'z') return fmtZ(p.z);
+  const m = /^d(\d+)$/.exec(field);
+  if (m) {
+    const v = p.d[+m[1] - 1];
+    return v == null || v === '' ? '' : String(v);
+  }
+  return '';
+}
 
 /**
  * @param {object} o
  * @param {HTMLCanvasElement} o.canvas
- * @param {() => object} o.getLayers  -> {pdf, str, txt} (каждый слой может быть null)
+ * @param {() => object} o.getLayers  -> {pdf, str, txt}
  * @param {(text:string) => void} o.onInfo
  * @param {(sx:number, sy:number) => boolean} [o.onTap] true — тап обработан (pick не вызывается)
  */
@@ -19,7 +31,6 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
   const view = { s: 1, cx: 0, cy: 0, ox: 0, oy: 0 };
   let enabled = true;
 
-  // Слои данных в порядке отрисовки
   const dataLayers = () => { const L = getLayers(); return [L.str, L.txt].filter(Boolean); };
 
   function resize() {
@@ -43,7 +54,7 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
   function fit() {
     let b = bounds();
     const { pdf } = getLayers();
-    if (!b && pdf && pdf.affine) {   // только PDF — вписываем его углы
+    if (!b && pdf && pdf.affine) {
       const T = pdf.affine, xs = [], ys = [];
       for (const [u, v] of [[0, 0], [pdf.width, 0], [0, pdf.height], [pdf.width, pdf.height]]) {
         xs.push(T.a * u + T.b * v + T.e); ys.push(T.c * u + T.d * v + T.f);
@@ -72,7 +83,6 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
     };
   }
 
-  // экранные координаты -> координаты PDF (u,v); null, если PDF нет
   function screenToPdf(sx, sy) {
     const { pdf } = getLayers();
     if (!pdf || !pdf.affine) return null;
@@ -93,42 +103,65 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
   }
 
   function drawLayer({ pts, groups }) {
-    for (const pass of [0, 1]) {                       // 0 — линии, 1 — точки сверху
-      for (const g of groups) {
-        const st = STYLES[g.id] || (g.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
-        if ((st.kind === 'points') !== (pass === 1)) continue;
+    // ── Pass 0: линии + стволы скважин ──
+    for (const g of groups) {
+      const st = STYLES[g.id] || (g.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
 
-        if (st.kind === 'points') {
+      if (st.kind === 'line') {
+        ctx.strokeStyle = st.color;
+        ctx.lineWidth = st.width;
+        ctx.beginPath();
+        g.idx.forEach((i, k) => {
+          const [sx, sy] = toScreen(pts[i]);
+          if (k === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+        });
+        ctx.stroke();
+        if (g.text) {
+          const [sx, sy] = toScreen(g.center);
           ctx.fillStyle = st.color;
-          for (const i of g.idx) {
-            const p = pts[i];
-            const [sx, sy] = toScreen(p);
-            ctx.beginPath();
-            ctx.arc(sx, sy, st.size, 0, Math.PI * 2);
-            ctx.fill();
-            if (st.labelZ) {
-              ctx.font = `12px ${FONT}`;
-              ctx.textAlign = 'left';
-              ctx.textBaseline = 'middle';
-              ctx.fillText(fmtZ(p.z), sx + st.size + 3, sy);
-            }
-          }
-        } else {
-          ctx.strokeStyle = st.color;
-          ctx.lineWidth = st.width;
-          ctx.beginPath();
-          g.idx.forEach((i, k) => {
-            const [sx, sy] = toScreen(pts[i]);
-            if (k === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
-          });
-          ctx.stroke();
-          if (g.text) {
-            const [sx, sy] = toScreen(g.center);
-            ctx.fillStyle = st.color;
-            ctx.font = `15px ${FONT}`;
-            ctx.textAlign = 'center';
+          ctx.font = `15px ${FONT}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(g.text, sx, sy);
+        }
+      }
+
+      // стволы скважин — для любой точки с посчитанным p.drill
+      for (const i of g.idx) {
+        const p = pts[i];
+        if (!p.drill) continue;
+        const [sx, sy] = toScreen(p);
+        const [ex, ey] = toScreen(p.drill.end);
+        ctx.strokeStyle = st.color;
+        ctx.lineWidth = st.width || 2;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+      }
+    }
+
+    // ── Pass 1: точки поверх линий ──
+    for (const g of groups) {
+      const st = STYLES[g.id] || (g.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
+      if (st.kind !== 'points') continue;
+
+      const labelField = st.labelField || (st.labelZ ? 'z' : null);
+      ctx.fillStyle = st.color;
+      for (const i of g.idx) {
+        const p = pts[i];
+        const [sx, sy] = toScreen(p);
+        ctx.beginPath();
+        ctx.arc(sx, sy, st.size, 0, Math.PI * 2);
+        ctx.fill();
+        if (labelField) {
+          const text = fieldValue(p, labelField);
+          if (text) {
+            ctx.font = `12px ${FONT}`;
+            ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
-            ctx.fillText(g.text, sx, sy);
+            // 4-A: справа сверху от устья
+            ctx.fillText(text, sx + st.size + 3, sy - 4);
           }
         }
       }
@@ -141,12 +174,11 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
     ctx.fillStyle = '#f4f6f8';
     ctx.fillRect(0, 0, innerWidth, innerHeight);
     ctx.lineJoin = 'round';
-    drawPdf(getLayers().pdf);                          // PDF — снизу
+    drawPdf(getLayers().pdf);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    for (const L of dataLayers()) drawLayer(L);        // STR/TXT — сверху
+    for (const L of dataLayers()) drawLayer(L);
   }
 
-  // ближайшая точка в радиусе 18px (по всем слоям данных)
   function pickPoint(cx, cy) {
     let best = null, bd = 18;
     for (const L of dataLayers()) for (const p of L.pts) {
@@ -160,11 +192,21 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
   function pick(cx, cy) {
     const p = pickPoint(cx, cy);
     if (!p) return;
+    const base = `X ${p.x.toFixed(3)} · Y ${p.y.toFixed(3)} · Z ${p.z.toFixed(3)}`;
+
+    if (p.drill) {
+      const d = p.drill;
+      const kind = d.actual ? 'факт' : 'проект';
+      const num = p.d[2] || '—';
+      onInfo(`Стринг ${p.id} · № ${num} · Азм ${d.az}° · Накл ${d.dip}° · Глуб ${d.depth} м (${kind}) · ${base}`);
+      return;
+    }
+
     const desc = p.d.map((v, i) => v ? `D${i + 1}=${v}` : '').filter(Boolean).join(' ');
-    onInfo(`Стринг ${p.id} · X ${p.x.toFixed(3)} · Y ${p.y.toFixed(3)} · Z ${p.z.toFixed(3)}` + (desc ? ` · ${desc}` : ''));
+    onInfo(`Стринг ${p.id} · ${base}` + (desc ? ` · ${desc}` : ''));
   }
 
-  // Касания: один палец — сдвиг, два пальца — масштаб, короткое касание — выбор точки
+  // ── Касания: 1 палец — сдвиг, 2 — pinch, короткое касание — pick ──
   const ps = new Map();
   let pinch0 = null, moved = 0, downAt = 0;
 
@@ -217,4 +259,3 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
     setEnabled(v) { enabled = v; cv.style.display = v ? 'block' : 'none'; if (v) resize(); },
   };
 }
-
