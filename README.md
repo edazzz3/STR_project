@@ -53,8 +53,27 @@ python3 -m http.server 8080
 │   └── renderers/
 │       ├── render2d.js        # 2D-canvas: слои, камера, pan/zoom, pick
 │       └── render3d.js        # 3D-сцена Three.js (заглушка построения)
-└── test (1).str               # пример входного файла
+├── test.str                   # пример .str (Surpac)
+├── testpoints_space.txt       # тексты: имя + X Y Z через пробел
+├── testpoints_comma.txt       # тексты: имя,X,Y,Z через запятую
+├── testpdf.pdf                # пример PDF-подложки
+└── testdwg.dwg                # пример DWG (пока не поддерживается)
 ```
+
+## Тестовые данные
+
+В корне лежат примеры для проверки:
+
+| Файл | Что проверяет |
+| --- | --- |
+| `test.str` | разбор стрингов Surpac (`strParser`) + стили |
+| `testpoints_space.txt` | `txtParser` с разделителем-пробелом (`имя X Y Z`) |
+| `testpoints_comma.txt` | `txtParser` с разделителем-запятой (`имя,X,Y,Z`) |
+| `testpdf.pdf` | загрузка PDF-подложки через pdf.js |
+| `testdwg.dwg` | пока не поддерживается (DWG в планах) |
+
+Запуск: поднять сервер (`python3 -m http.server 8080`) и по очереди загрузить файлы кнопками
+PDF / STR / TXT.
 
 
 ## Как это реализовано
