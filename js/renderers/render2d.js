@@ -28,7 +28,9 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
   let enabled = true;
   let highlighted = null;
 
-  const dataLayers = () => { const L = getLayers(); return [L.str, L.txt].filter(Boolean); };
+  const allLayers = () => getLayers() || [];
+  const pdfLayers = () => allLayers().filter(L => L.kind === 'pdf' && L.visible && L.affine);
+  const dataLayers = () => allLayers().filter(L => (L.kind === 'str' || L.kind === 'txt') && L.visible);
 
   function resize() {
     cv.width = innerWidth * dpr;
@@ -50,13 +52,18 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
 
   function fit() {
     let b = bounds();
-    const { pdf } = getLayers();
-    if (!b && pdf && pdf.affine) {
-      const T = pdf.affine, xs = [], ys = [];
-      for (const [u, v] of [[0, 0], [pdf.width, 0], [0, pdf.height], [pdf.width, pdf.height]]) {
-        xs.push(T.a * u + T.b * v + T.e); ys.push(T.c * u + T.d * v + T.f);
+    const pdfs = pdfLayers();
+    if (!b && pdfs.length) {
+      let mnx = Infinity, mxx = -Infinity, mny = Infinity, mxy = -Infinity;
+      for (const pdf of pdfs) {
+        const T = pdf.affine, xs = [], ys = [];
+        for (const [u, v] of [[0, 0], [pdf.width, 0], [0, pdf.height], [pdf.width, pdf.height]]) {
+          xs.push(T.a * u + T.b * v + T.e); ys.push(T.c * u + T.d * v + T.f);
+        }
+        mnx = Math.min(mnx, ...xs); mxx = Math.max(mxx, ...xs);
+        mny = Math.min(mny, ...ys); mxy = Math.max(mxy, ...ys);
       }
-      b = { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+      if (mnx !== Infinity) b = { minX: mnx, maxX: mxx, minY: mny, maxY: mxy };
     }
     if (!b) return;
     view.cx = (b.minX + b.maxX) / 2;
@@ -80,27 +87,26 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
     };
   }
 
-  function screenToPdf(sx, sy) {
-    const { pdf } = getLayers();
-    if (!pdf || !pdf.affine) return null;
+  function screenToPdf(sx, sy, pdfLayer) {
+    if (!pdfLayer || !pdfLayer.affine) return null;
     const w = toWorld(sx, sy);
-    return worldToPdf(pdf.affine, w.x, w.y);
+    return worldToPdf(pdfLayer.affine, w.x, w.y);
   }
 
-  function drawPdf(pdf) {
-    if (!pdf || !pdf.affine) return;
-    const T = pdf.affine, s = view.s;
+  function drawPdfLayer(L) {
+    if (!L.affine) return;
+    const T = L.affine, s = view.s;
     const tx = s * (T.e - view.cx) + innerWidth / 2 + view.ox;
     const ty = innerHeight / 2 + view.oy - s * (T.f - view.cy);
     ctx.save();
     ctx.setTransform(dpr * s * T.a, -dpr * s * T.c, dpr * s * T.b, -dpr * s * T.d, dpr * tx, dpr * ty);
     ctx.globalAlpha = 0.85;
-    ctx.drawImage(pdf.canvas, 0, 0);
+    ctx.drawImage(L.canvas, 0, 0);
     ctx.restore();
   }
 
   function drawLayer({ pts, groups }) {
-    // ── Pass 0: линии, стволы скважин ──
+    // Pass 0: линии, стволы скважин
     for (const g of groups) {
       const st = STYLES[g.id] || (g.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
 
@@ -137,7 +143,7 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
       }
     }
 
-    // ── Pass 1: точки поверх линий ──
+    // Pass 1: точки
     for (const g of groups) {
       const st = STYLES[g.id] || (g.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
       if (st.kind !== 'points') continue;
@@ -167,10 +173,9 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
       }
     }
 
-    // ── Pass 2: подсветка выбранной точки (любого типа: line или points) ──
+    // Pass 2: подсветка выбранной точки (любого типа)
     if (highlighted && pts.includes(highlighted)) {
       const hi = pts.indexOf(highlighted);
-      // для drillhole-стринга подсвечиваем только устья (забойные точки не рисуются)
       let hidden = false;
       for (const g of groups) {
         if (!g.idx.includes(hi)) continue;
@@ -198,17 +203,23 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
     ctx.fillStyle = '#f4f6f8';
     ctx.fillRect(0, 0, innerWidth, innerHeight);
     ctx.lineJoin = 'round';
-    drawPdf(getLayers().pdf);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    for (const L of pdfLayers()) {
+      drawPdfLayer(L);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
     for (const L of dataLayers()) drawLayer(L);
   }
 
   function pickPoint(cx, cy) {
     let best = null, bd = 18;
-    for (const L of dataLayers()) for (const p of L.pts) {
-      const [sx, sy] = toScreen(p);
-      const d = Math.hypot(sx - cx, sy - cy);
-      if (d < bd) { bd = d; best = p; }
+    for (const L of dataLayers()) {
+      if (L.locked) continue;
+      for (const p of L.pts) {
+        const [sx, sy] = toScreen(p);
+        const d = Math.hypot(sx - cx, sy - cy);
+        if (d < bd) { bd = d; best = p; }
+      }
     }
     return best;
   }
@@ -233,7 +244,6 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
 
   function resetHighlight() { highlighted = null; }
 
-  // Ввод (жесты, зум, тап) — через отдельный модуль
   createInput({
     canvas: cv,
     getScale: () => view.s,
@@ -248,7 +258,7 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
       draw();
     },
     onTap: (cx, cy) => {
-      if (onTap && onTap(cx, cy)) return;   // обработано извне (геореференс)
+      if (onTap && onTap(cx, cy)) return;
       pick(cx, cy);
     },
   });

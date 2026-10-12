@@ -1,7 +1,10 @@
-// Единое состояние приложения. Один источник правды для всех модулей.
-// Позже, при переходе на слои, layers станет массивом:
-//   layers: [{ id, kind, name, visible, pts, groups, canvas, affine, userAffine, ... }]
+// Единое состояние приложения.
+// layers — массив слоёв:
+//   { id, kind: 'pdf'|'str'|'txt', name, visible, locked,
+//     pts, groups,                                 // str/txt
+//     canvas, width, height, affine, userAffine }  // pdf
 export const state = {
-  layers: { pdf: null, str: null, txt: null },
+  layers: [],
+  activeId: null,
   mode3d: false,
 };

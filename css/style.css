@@ -44,7 +44,6 @@ label.switch input:checked + .track::after { transform: translateX(20px); }
 canvas { display: block; width: 100vw; height: 100vh; touch-action: none; position: absolute; top: 0; left: 0; }
 #c3 { display: none; }
 
-/* Оверлей загрузки 3D */
 #loader {
   position: fixed; inset: 0; z-index: 10;
   background: rgba(244, 246, 248, 0.85);
@@ -62,3 +61,59 @@ canvas { display: block; width: 100vw; height: 100vh; touch-action: none; positi
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Панель слоёв ────────────────────────────────── */
+/* top/bottom проставляет JS (syncSidebarBounds), чтобы не перекрывать тулбары */
+#sidebar {
+  position: fixed; left: 0; z-index: 3;
+  width: 28px; background: #fff; box-shadow: 1px 0 4px #0001;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  top: 0; bottom: 0; /* временно, JS перезапишет */
+}
+#sidebar.expanded { width: 220px; }
+
+.sidebar-header {
+  flex: 0 0 auto;
+  cursor: pointer;
+  font-family: inherit; font-size: 14px; color: #1a1a1a;
+  user-select: none;
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  text-align: center; padding: 12px 4px;
+  touch-action: manipulation;
+}
+.sidebar-header:hover { color: #1e6fe8; }
+#sidebar.expanded .sidebar-header {
+  writing-mode: horizontal-tb; transform: none;
+  padding: 10px 14px; border-bottom: 1px solid #eef1f4;
+}
+
+.sidebar-body {
+  flex: 1 1 auto; overflow-y: auto; overflow-x: hidden;
+  display: none;
+}
+#sidebar.expanded .sidebar-body { display: block; }
+
+.layer-empty { padding: 12px; color: #9aa5b1; font-size: 13px; }
+
+.layer-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px; font-size: 13px; color: #1a1a1a;
+  cursor: pointer; border-bottom: 1px solid #f0f2f5;
+  white-space: nowrap;
+}
+.layer-row:hover { background: #f7f9fb; }
+.layer-row.active { background: rgba(30, 111, 232, 0.15); }
+.layer-row .layer-lock,
+.layer-row .layer-eye,
+.layer-row .layer-del {
+  flex: 0 0 auto; cursor: pointer; user-select: none; font-size: 14px;
+  line-height: 1; padding: 2px;
+}
+.layer-row .layer-name {
+  flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; min-width: 0;
+}
+.layer-row.locked .layer-lock { color: #e0a010; }
+.layer-row.hidden-layer { opacity: 0.55; }
+.layer-row .layer-del { color: #c04040; }

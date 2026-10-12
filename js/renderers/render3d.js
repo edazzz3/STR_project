@@ -87,7 +87,9 @@ export function createRender3d({ canvas }) {
   function build(layers) {
     clear();
     pivot.reset();
-    const sets = [layers.str, layers.txt].filter(Boolean);
+
+    // в 3D показываем только видимые str/txt слои
+    const sets = layers.filter(L => (L.kind === 'str' || L.kind === 'txt') && L.visible);
     const all = sets.flatMap(L => L.pts);
     if (!all.length) return;
 
@@ -145,13 +147,12 @@ export function createRender3d({ canvas }) {
     cancelPivot: pivot.cancel,
     isPivotPicking: pivot.isPicking,
     resetPivot: pivot.reset,
-        setEnabled(v) {
+    setEnabled(v) {
       active = v;
       canvas.style.display = v ? 'block' : 'none';
       if (v) {
         resize();
         loop();
-        // layout применится асинхронно — пересчитываем размер на след. кадре
         requestAnimationFrame(() => { if (active) resize(); });
       } else {
         pivot.cancel();
