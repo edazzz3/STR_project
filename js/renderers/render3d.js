@@ -18,7 +18,7 @@ function makeCircleTexture() {
   return tex;
 }
 
-export function createRender3d({ canvas, onInfo }) {
+export function createRender3d({ canvas }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   const scene = new THREE.Scene();
@@ -40,9 +40,8 @@ export function createRender3d({ canvas, onInfo }) {
   let active = false;
   const circleTex = makeCircleTexture();
 
-  // В собранной сцене центр облака — в начале координат, плоскость вращения проходит через Y=0.
   const pivot = createPivot({
-    canvas, camera, controls, scene, content,
+    canvas, camera, controls, content,
     getPlaneY: () => 0,
   });
 
@@ -137,7 +136,6 @@ export function createRender3d({ canvas, onInfo }) {
     if (!active) return;
     requestAnimationFrame(loop);
     controls.update();
-    pivot.updateBillboard();
     renderer.render(scene, camera);
   }
 
@@ -147,10 +145,17 @@ export function createRender3d({ canvas, onInfo }) {
     cancelPivot: pivot.cancel,
     isPivotPicking: pivot.isPicking,
     resetPivot: pivot.reset,
-    setEnabled(v) {
-      active = v; canvas.style.display = v ? 'block' : 'none';
-      if (v) { resize(); loop(); }
-      else pivot.cancel();
+        setEnabled(v) {
+      active = v;
+      canvas.style.display = v ? 'block' : 'none';
+      if (v) {
+        resize();
+        loop();
+        // layout применится асинхронно — пересчитываем размер на след. кадре
+        requestAnimationFrame(() => { if (active) resize(); });
+      } else {
+        pivot.cancel();
+      }
     },
   };
 }

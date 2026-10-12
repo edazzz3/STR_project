@@ -1,6 +1,8 @@
-// 2D-рендер на canvas: слои PDF (снизу), затем STR и TXT (сверху). Камера, pan, pinch-zoom, pick.
+// 2D-рендер на canvas: слои PDF (снизу), затем STR и TXT (сверху). Камера, pick.
+// Жесты и зум — в ./input.js
 import { STYLES, DEFAULT_STYLE } from '../parsers/strParser.js';
 import { worldToPdf } from '../parsers/pdfOverlay.js';
+import { createInput } from './input.js';
 
 const FONT = '"Times New Roman", Times, serif';
 const fmtZ = z => String(Number(z.toFixed(3)));
@@ -98,6 +100,7 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
   }
 
   function drawLayer({ pts, groups }) {
+    // ── Pass 0: линии, стволы скважин ──
     for (const g of groups) {
       const st = STYLES[g.id] || (g.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
 
@@ -134,6 +137,7 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
       }
     }
 
+    // ── Pass 1: точки поверх линий ──
     for (const g of groups) {
       const st = STYLES[g.id] || (g.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
       if (st.kind !== 'points') continue;
@@ -151,14 +155,6 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
         ctx.arc(sx, sy, st.size, 0, Math.PI * 2);
         ctx.fill();
 
-        if (p === highlighted) {
-          ctx.strokeStyle = HL_COLOR;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(sx, sy, st.size + HL_EXTRA, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-
         if (labelField) {
           const text = fieldValue(p, labelField);
           if (text) {
@@ -168,6 +164,30 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
             ctx.fillText(text, sx + st.size + 3, sy - 4);
           }
         }
+      }
+    }
+
+    // ── Pass 2: подсветка выбранной точки (любого типа: line или points) ──
+    if (highlighted && pts.includes(highlighted)) {
+      const hi = pts.indexOf(highlighted);
+      // для drillhole-стринга подсвечиваем только устья (забойные точки не рисуются)
+      let hidden = false;
+      for (const g of groups) {
+        if (!g.idx.includes(hi)) continue;
+        const isDrillGroup = g.idx.some(idx => pts[idx].drill);
+        if (isDrillGroup && !highlighted.drill) hidden = true;
+        break;
+      }
+
+      if (!hidden) {
+        const st = STYLES[highlighted.id] || (highlighted.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
+        const baseR = st.kind === 'points' ? st.size : 3;
+        const [sx, sy] = toScreen(highlighted);
+        ctx.strokeStyle = HL_COLOR;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sx, sy, baseR + HL_EXTRA, 0, Math.PI * 2);
+        ctx.stroke();
       }
     }
   }
@@ -213,56 +233,25 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
 
   function resetHighlight() { highlighted = null; }
 
-  const ps = new Map();
-  let pinch0 = null, moved = 0, downAt = 0;
-
-  cv.addEventListener('pointerdown', e => {
-    cv.setPointerCapture(e.pointerId);
-    ps.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    moved = 0; downAt = Date.now();
-    if (ps.size === 2) {
-      const [a, b] = [...ps.values()];
-      pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y), s: view.s };
-    }
+  // Ввод (жесты, зум, тап) — через отдельный модуль
+  createInput({
+    canvas: cv,
+    getScale: () => view.s,
+    onPan: (dx, dy) => { view.ox += dx; view.oy += dy; draw(); },
+    onPinch: (s) => { view.s = s; draw(); },
+    onWheelZoom: (cx, cy, factor) => {
+      const before = toWorld(cx, cy);
+      view.s *= factor;
+      const after = toWorld(cx, cy);
+      view.cx += before.x - after.x;
+      view.cy += before.y - after.y;
+      draw();
+    },
+    onTap: (cx, cy) => {
+      if (onTap && onTap(cx, cy)) return;   // обработано извне (геореференс)
+      pick(cx, cy);
+    },
   });
-
-  cv.addEventListener('pointermove', e => {
-    if (!ps.has(e.pointerId)) return;
-    const prev = ps.get(e.pointerId);
-    const cur = { x: e.clientX, y: e.clientY };
-    moved += Math.abs(cur.x - prev.x) + Math.abs(cur.y - prev.y);
-    ps.set(e.pointerId, cur);
-    if (ps.size === 1) {
-      view.ox += cur.x - prev.x;
-      view.oy += cur.y - prev.y;
-    } else if (ps.size === 2 && pinch0) {
-      const [a, b] = [...ps.values()];
-      const d = Math.hypot(a.x - b.x, a.y - b.y);
-      view.s = pinch0.s * d / pinch0.d;
-    }
-    draw();
-  });
-
-  function endPointer(e) {
-    const wasTap = ps.size === 1 && moved < 8 && Date.now() - downAt < 400;
-    if (wasTap && !(onTap && onTap(e.clientX, e.clientY))) pick(e.clientX, e.clientY);
-    ps.delete(e.pointerId);
-    if (ps.size < 2) pinch0 = null;
-  }
-  cv.addEventListener('pointerup', endPointer);
-  cv.addEventListener('pointercancel', endPointer);
-
-  // Зум колёсиком в точку курсора
-  cv.addEventListener('wheel', e => {
-    e.preventDefault();
-    const k = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-    const before = toWorld(e.clientX, e.clientY);
-    view.s *= k;
-    const after = toWorld(e.clientX, e.clientY);
-    view.cx += before.x - after.x;
-    view.cy += before.y - after.y;
-    draw();
-  }, { passive: false });
 
   addEventListener('resize', resize);
 
