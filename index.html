@@ -28,6 +28,7 @@
 <div id="top">
   <label class="btn">Импорт <input type="file" id="fileInput" multiple></label>
   <label class="chk"><input type="checkbox" id="swap"> swap X/Y</label>
+  <button id="fieldsBtn" title="Отображение полей у точек">👁</button>
   <label class="switch"><span>2D</span><input type="checkbox" id="mode3d"><span class="track"></span><span>3D</span></label>
   <button id="pickPivot" title="Выбрать точку вращения (3D)">⌖</button>
   <button id="fit">показать все</button>
@@ -37,6 +38,34 @@
 <canvas id="c3"></canvas>
 <div id="info">Откройте файл .str (кнопка Импорт)</div>
 <div id="loader" hidden><div class="spinner"></div><span>Загрузка 3D…</span></div>
+
+<!-- Модальное окно полей -->
+<div id="fieldsModal" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-body">
+    <div class="modal-step step-1">
+      <div class="modal-title">Выберите стринги</div>
+      <div class="modal-list" id="fieldsStreamList"></div>
+      <div class="modal-actions">
+        <div class="modal-actions-right">
+          <button id="fieldsNext" class="primary">Далее</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-step step-2" hidden>
+      <div class="modal-title">Выберите поля (макс. 2)</div>
+      <div class="modal-list" id="fieldsList"></div>
+      <label class="modal-round"><input type="checkbox" id="fieldsRound"> Округлить до 1 знака</label>
+      <div class="modal-actions">
+        <button id="fieldsBack">Назад</button>
+        <div class="modal-actions-right">
+          <button id="fieldsReset">Сброс</button>
+          <button id="fieldsApply" class="primary">Применить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script type="module" src="js/app.js"></script>
 </body>

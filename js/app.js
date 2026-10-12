@@ -4,6 +4,7 @@ import { parseTxt } from './parsers/txtParser.js';
 import { loadPdf, defaultAffine, solveAffine } from './parsers/pdfOverlay.js';
 import { createRender2d } from './renderers/render2d.js';
 import { createLayersPanel } from './ui/layers.js';
+import { createFieldsModal } from './ui/fields.js';
 import { state } from './state.js';
 
 const MAX_LAYERS = 10;
@@ -16,7 +17,6 @@ let r3 = null;
 let uid = 0;
 const newLayerId = () => 'L' + (++uid) + '_' + Date.now();
 
-// ── Сайдбар: top/bottom под высоту тулбаров ──
 function syncSidebarBounds() {
   const sb = $('sidebar');
   if (!sb) return;
@@ -29,6 +29,7 @@ function syncSidebarBounds() {
 const r2 = createRender2d({
   canvas: $('c'),
   getLayers: () => state.layers,
+  getLabelConfig: () => state.labelConfig,
   onInfo: setInfo,
   onTap: (x, y) => georef.active && georef.tap(x, y),
 });
@@ -36,6 +37,10 @@ const r2 = createRender2d({
 const layersPanel = createLayersPanel({
   container: $('sidebar'),
   onChange: () => redraw(false),
+});
+
+const fieldsModal = createFieldsModal({
+  onApply: () => { r2.draw(); },
 });
 
 async function readText(file) {
@@ -135,6 +140,9 @@ $('fileInput').addEventListener('change', async e => {
 
 $('fit').addEventListener('click', () => redraw(true));
 
+// ---------- ОТОБРАЖЕНИЕ ПОЛЕЙ ----------
+$('fieldsBtn').addEventListener('click', () => fieldsModal.open());
+
 // ---------- 2D / 3D ----------
 $('mode3d').addEventListener('change', async e => {
   state.mode3d = e.target.checked;
@@ -224,7 +232,6 @@ if ('serviceWorker' in navigator) {
 r2.resize();
 syncSidebarBounds();
 
-// При resize окна и при изменении высоты тулбаров (flex-wrap) — пересчитать
 window.addEventListener('resize', syncSidebarBounds);
 if ('ResizeObserver' in window) {
   const ro = new ResizeObserver(syncSidebarBounds);

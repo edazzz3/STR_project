@@ -34,6 +34,7 @@ export function createRender3d({ canvas }) {
 
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
+  controls.zoomToCursor = true;
 
   const content = new THREE.Group();
   scene.add(content);
@@ -88,7 +89,6 @@ export function createRender3d({ canvas }) {
     clear();
     pivot.reset();
 
-    // в 3D показываем только видимые str/txt слои
     const sets = layers.filter(L => (L.kind === 'str' || L.kind === 'txt') && L.visible);
     const all = sets.flatMap(L => L.pts);
     if (!all.length) return;

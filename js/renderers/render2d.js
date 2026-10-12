@@ -5,23 +5,38 @@ import { worldToPdf } from '../parsers/pdfOverlay.js';
 import { createInput } from './input.js';
 
 const FONT = '"Times New Roman", Times, serif';
-const fmtZ = z => String(Number(z.toFixed(3)));
-const TXT_STYLE = { kind: 'points', color: '#d02020', size: 3, labelField: 'z' };
+const TXT_STYLE = { kind: 'points', color: '#d02020', size: 3 };
 const HL_COLOR = 'rgba(0, 120, 255, 0.7)';
 const HL_EXTRA = 4;
 
-function fieldValue(p, field) {
-  if (!field) return '';
-  if (field === 'z') return fmtZ(p.z);
-  const m = /^d(\d+)$/.exec(field);
+const fmtZ = z => String(Number((+z).toFixed(3)));
+const fmtShort = v => {
+  const n = +v;
+  if (!Number.isFinite(n)) return String(v);
+  return String(Number(n.toFixed(3)));
+};
+const fmtRound1 = v => {
+  const n = +v;
+  if (!Number.isFinite(n)) return String(v);
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+};
+
+function fieldValue(p, key, round) {
+  if (!key) return '';
+  if (key === 'z') {
+    if (p.z == null || !Number.isFinite(+p.z)) return '';
+    return round ? fmtRound1(p.z) : fmtZ(p.z);
+  }
+  const m = /^d(\d+)$/.exec(key);
   if (m) {
     const v = p.d[+m[1] - 1];
-    return v == null || v === '' ? '' : String(v);
+    if (v == null || v === '') return '';
+    return round ? fmtRound1(v) : fmtShort(v);
   }
   return '';
 }
 
-export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
+export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, onTap }) {
   const ctx = cv.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const view = { s: 1, cx: 0, cy: 0, ox: 0, oy: 0 };
@@ -31,6 +46,14 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
   const allLayers = () => getLayers() || [];
   const pdfLayers = () => allLayers().filter(L => L.kind === 'pdf' && L.visible && L.affine);
   const dataLayers = () => allLayers().filter(L => (L.kind === 'str' || L.kind === 'txt') && L.visible);
+
+  const labelsFor = (p) => {
+    const cfg = (getLabelConfig() || {})[p.id];
+    if (cfg) return { fields: cfg.fields || [], round: !!cfg.round };
+    const st = STYLES[p.id];
+    if (st && st.labelField) return { fields: [st.labelField], round: false };
+    return { fields: [], round: false };
+  };
 
   function resize() {
     cv.width = innerWidth * dpr;
@@ -143,12 +166,11 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
       }
     }
 
-    // Pass 1: точки
+    // Pass 1: точки + подписи полей
     for (const g of groups) {
       const st = STYLES[g.id] || (g.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
       if (st.kind !== 'points') continue;
 
-      const labelField = st.labelField || (st.labelZ ? 'z' : null);
       const isDrillGroup = g.idx.some(i => pts[i].drill);
 
       ctx.fillStyle = st.color;
@@ -161,19 +183,22 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
         ctx.arc(sx, sy, st.size, 0, Math.PI * 2);
         ctx.fill();
 
-        if (labelField) {
-          const text = fieldValue(p, labelField);
-          if (text) {
-            ctx.font = `12px ${FONT}`;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(text, sx + st.size + 3, sy - 4);
+        const { fields, round } = labelsFor(p);
+        if (fields.length) {
+          ctx.font = `12px ${FONT}`;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          const t1 = fieldValue(p, fields[0], round);
+          if (t1) ctx.fillText(t1, sx + st.size + 3, sy - 4);
+          if (fields.length > 1) {
+            const t2 = fieldValue(p, fields[1], round);
+            if (t2) ctx.fillText(t2, sx + st.size + 3, sy + 12);
           }
         }
       }
     }
 
-    // Pass 2: подсветка выбранной точки (любого типа)
+    // Pass 2: подсветка выбранной точки
     if (highlighted && pts.includes(highlighted)) {
       const hi = pts.indexOf(highlighted);
       let hidden = false;
