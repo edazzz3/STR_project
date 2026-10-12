@@ -1,9 +1,24 @@
-// 3D-режим на Three.js (импорт через importmap из index.html, CDN).
+// 3D-режим на Three.js.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STYLES, DEFAULT_STYLE } from '../parsers/strParser.js';
+import { createPivot } from './pivot.js';
 
-export function createRender3d({ canvas }) {
+function makeCircleTexture() {
+  const s = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffffff';
+  g.beginPath();
+  g.arc(s / 2, s / 2, s / 2 - 2, 0, Math.PI * 2);
+  g.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+export function createRender3d({ canvas, onInfo }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   const scene = new THREE.Scene();
@@ -23,6 +38,35 @@ export function createRender3d({ canvas }) {
   const content = new THREE.Group();
   scene.add(content);
   let active = false;
+  const circleTex = makeCircleTexture();
+
+  // В собранной сцене центр облака — в начале координат, плоскость вращения проходит через Y=0.
+  const pivot = createPivot({
+    canvas, camera, controls, scene, content,
+    getPlaneY: () => 0,
+  });
+
+  // Панорама зажатым колесом
+  let panning = false, lastX = 0, lastY = 0;
+  canvas.addEventListener('pointerdown', e => {
+    if (e.button === 1) { panning = true; lastX = e.clientX; lastY = e.clientY; e.preventDefault(); }
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!panning) return;
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+    const scale = camera.position.distanceTo(controls.target) * 0.0015;
+    const offset = right.multiplyScalar(-dx * scale).add(up.multiplyScalar(dy * scale));
+    camera.position.add(offset);
+    controls.target.add(offset);
+    controls.update();
+  });
+  const endPan = e => { if (e.button === 1) panning = false; };
+  canvas.addEventListener('pointerup', endPan);
+  canvas.addEventListener('pointerleave', endPan);
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
 
   function resize() {
     renderer.setSize(innerWidth, innerHeight, false);
@@ -41,30 +85,36 @@ export function createRender3d({ canvas }) {
     }
   }
 
-  /**
-   * Заглушка построения: линии стрингов и точки STR/TXT по Z.
-   * Система Three.js: X = восток, Y(вверх) = Z съёмки, Z = -север.
-   * TODO: подписи, объёмные трубы для линий, подложка PDF как текстура на плоскости.
-   */
   function build(layers) {
     clear();
+    pivot.reset();
     const sets = [layers.str, layers.txt].filter(Boolean);
     const all = sets.flatMap(L => L.pts);
     if (!all.length) return;
-    const c = { x: 0, y: 0, z: 0 };
-    for (const p of all) { c.x += p.x; c.y += p.y; c.z += p.z; }
-    c.x /= all.length; c.y /= all.length; c.z /= all.length;
-    const v = p => new THREE.Vector3(p.x - c.x, p.z - c.z, -(p.y - c.y));
+
+    let sx = 0, sy = 0, sz = 0;
+    for (const p of all) { sx += p.x; sy += p.y; sz += p.z; }
+    const cx = sx / all.length, cy = sy / all.length, cz = sz / all.length;
+    const v = p => new THREE.Vector3(p.x - cx, p.z - cz, -(p.y - cy));
 
     for (const { pts, groups } of sets) {
       for (const g of groups) {
         const st = STYLES[g.id] || (g.id === 'txt' ? { kind: 'points', color: '#d02020' } : DEFAULT_STYLE);
-        const geom = new THREE.BufferGeometry().setFromPoints(g.idx.map(i => v(pts[i])));
+
+        const isDrillGroup = g.idx.some(i => pts[i].drill);
+        const drawIdx = (st.kind === 'points' && isDrillGroup)
+          ? g.idx.filter(i => pts[i].drill)
+          : g.idx;
+        if (!drawIdx.length) continue;
+
+        const geom = new THREE.BufferGeometry().setFromPoints(drawIdx.map(i => v(pts[i])));
         content.add(st.kind === 'points'
-          ? new THREE.Points(geom, new THREE.PointsMaterial({ color: st.color, size: 4, sizeAttenuation: false }))
+          ? new THREE.Points(geom, new THREE.PointsMaterial({
+              color: st.color, size: 6, sizeAttenuation: false,
+              map: circleTex, transparent: true, alphaTest: 0.5,
+            }))
           : new THREE.Line(geom, new THREE.LineBasicMaterial({ color: st.color })));
 
-        // ── Стволы скважин ──
         for (const i of g.idx) {
           const p = pts[i];
           if (!p.drill) continue;
@@ -73,7 +123,7 @@ export function createRender3d({ canvas }) {
         }
       }
     }
-    // камера: по размеру облака точек
+
     const box = new THREE.Box3().setFromObject(content);
     const size = box.getSize(new THREE.Vector3()).length() || 100;
     controls.target.set(0, 0, 0);
@@ -87,14 +137,20 @@ export function createRender3d({ canvas }) {
     if (!active) return;
     requestAnimationFrame(loop);
     controls.update();
+    pivot.updateBillboard();
     renderer.render(scene, camera);
   }
 
   return {
     build, resize,
+    startPivot: pivot.start,
+    cancelPivot: pivot.cancel,
+    isPivotPicking: pivot.isPicking,
+    resetPivot: pivot.reset,
     setEnabled(v) {
       active = v; canvas.style.display = v ? 'block' : 'none';
       if (v) { resize(); loop(); }
+      else pivot.cancel();
     },
   };
 }

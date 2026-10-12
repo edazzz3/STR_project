@@ -1,17 +1,18 @@
 // Оффлайн-кеширование: app shell — поштучно (один 404 не ломает весь install),
 // CDN-библиотеки — при первом использовании.
-const CACHE = 'str-viewer-v3';            
+const CACHE = 'str-viewer-v4';
 const SHELL = [
   './', './index.html', './manifest.json', './css/style.css',
   './js/app.js',
   './js/parsers/strParser.js', './js/parsers/txtParser.js', './js/parsers/pdfOverlay.js',
   './js/renderers/render2d.js', './js/renderers/render3d.js',
+  './js/renderers/pivot.js',
 ];
 
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => Promise.all(SHELL.map(url => c.add(url).catch(() => {}))))  // ← поштучно
+      .then(c => Promise.all(SHELL.map(url => c.add(url).catch(() => {}))))
       .then(() => self.skipWaiting())
   );
 });
@@ -36,7 +37,6 @@ self.addEventListener('fetch', e => {
         }
         return res;
       }).catch(() => hit || new Response('Offline', { status: 503, statusText: 'Offline' }));
-      //                                        ↑ fallback, если ни кеша, ни сети
       return hit || net;
     })
   );

@@ -9,11 +9,9 @@ const infoEl = $('info');
 const swapEl = $('swap');
 const setInfo = t => { infoEl.textContent = t; };
 
-// ---------- СОСТОЯНИЕ СЛОЁВ ----------
-const layers = { pdf: null, str: null, txt: null };   // str/txt: {pts, groups, name}
-const sources = { str: null, txt: null };             // исходный текст для перепарсинга при смене X/Y
+const layers = { pdf: null, str: null, txt: null };
 let mode3d = false;
-let r3 = null;                                        // render3d создаётся лениво
+let r3 = null;
 
 const r2 = createRender2d({
   canvas: $('c'),
@@ -22,18 +20,10 @@ const r2 = createRender2d({
   onTap: (x, y) => georef.active && georef.tap(x, y),
 });
 
-// Чтение файла: UTF-8, а если не получилось — Windows-1251 (кириллица из Surpac)
 async function readText(file) {
   const buf = await file.arrayBuffer();
   try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
   catch { return new TextDecoder('windows-1251').decode(buf); }
-}
-
-const parsers = { str: parseStr, txt: parseTxt };
-
-function parseLayer(kind) {
-  const s = sources[kind];
-  layers[kind] = s ? { ...parsers[kind](s.text, swapEl.checked), name: s.name } : null;
 }
 
 function summary() {
@@ -49,7 +39,7 @@ function summary() {
 async function get3d() {
   if (!r3) {
     const { createRender3d } = await import('./renderers/render3d.js');
-    r3 = createRender3d({ canvas: $('c3') });
+    r3 = createRender3d({ canvas: $('c3'), onInfo: setInfo });
   }
   return r3;
 }
@@ -63,43 +53,47 @@ async function redraw(refit) {
   }
 }
 
-// ---------- ЗАГРУЗКА ----------
-for (const kind of ['str', 'txt']) {
-  $(kind === 'str' ? 'fileStr' : 'fileTxt').addEventListener('change', async e => {
-    const f = e.target.files[0];
-    if (!f) return;
-    sources[kind] = { text: await readText(f), name: f.name };
-    parseLayer(kind);
-   if (layers.pdf && !layers.pdf.userAffine) {
-  layers.pdf.affine = defaultAffine(layers.pdf, r2.bounds());
-}
-    setInfo(summary());
-    redraw(true);
-    e.target.value = '';
-  });
-}
+// ---------- ИМПОРТ ----------
+$('fileInput').addEventListener('change', async e => {
+  const files = [...e.target.files];
+  if (!files.length) return;
+  const swap = swapEl.checked;
+  let lastErr = '';
 
-$('filePdf').addEventListener('change', async e => {
-  const f = e.target.files[0];
-  if (!f) return;
-  try {
-    setInfo('Загрузка PDF…');
-    const pdf = await loadPdf(f);
-    pdf.affine = defaultAffine(pdf, r2.bounds());
-    pdf.userAffine = false;
-    layers.pdf = pdf;
-    setInfo(summary());
-    redraw(true);
-  } catch (err) {
-    setInfo('Ошибка PDF: ' + err.message);
+  for (const f of files) {
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    try {
+      if (ext === 'pdf') {
+        setInfo('Загрузка PDF…');
+        const pdf = await loadPdf(f);
+        pdf.affine = defaultAffine(pdf, r2.bounds());
+        pdf.userAffine = false;
+        layers.pdf = pdf;
+      } else if (ext === 'str') {
+        const text = await readText(f);
+        layers.str = { ...parseStr(text, false), name: f.name };
+        if (layers.pdf && !layers.pdf.userAffine) {
+          layers.pdf.affine = defaultAffine(layers.pdf, r2.bounds());
+        }
+      } else if (ext === 'dwg' || ext === 'dxf') {
+        lastErr = `«${f.name}»: формат не поддерживается`;
+      } else {
+        const text = await readText(f);
+        layers.txt = { ...parseTxt(text, swap), name: f.name };
+        if (layers.pdf && !layers.pdf.userAffine) {
+          layers.pdf.affine = defaultAffine(layers.pdf, r2.bounds());
+        }
+      }
+    } catch (err) {
+      lastErr = `«${f.name}»: ${err.message}`;
+    }
   }
-  e.target.value = '';
-});
 
-swapEl.addEventListener('change', () => {
-  if (!sources.str && !sources.txt) return;
-  parseLayer('str'); parseLayer('txt');
+  r2.resetHighlight();
+  if (r3) r3.resetPivot();
+  setInfo(lastErr || summary());
   redraw(true);
+  e.target.value = '';
 });
 
 $('fit').addEventListener('click', () => redraw(true));
@@ -111,7 +105,7 @@ $('mode3d').addEventListener('change', async e => {
   if (mode3d) {
     try {
       const r = await get3d();
-       if (!mode3d) return;
+      if (!mode3d) return;
       r.build(layers);
       r.setEnabled(true);
     } catch (err) {
@@ -120,11 +114,25 @@ $('mode3d').addEventListener('change', async e => {
     }
   } else if (r3) {
     r3.setEnabled(false);
+    r3.cancelPivot();
+    $('pickPivot').classList.remove('active');
   }
 });
 
-// ---------- ПРИВЯЗКА PDF (2 пары точек) ----------
-// Для каждой пары: тап по месту на PDF, затем тап по точке STR/TXT.
+// ---------- ВЫБОР ТОЧКИ ВРАЩЕНИЯ (3D) ----------
+$('pickPivot').addEventListener('click', async () => {
+  if (!mode3d) return setInfo('Сначала переключитесь в 3D');
+  const r = await get3d();
+  if (r.isPivotPicking()) { r.cancelPivot(); $('pickPivot').classList.remove('active'); return; }
+  r.startPivot((ok, msg) => {
+    $('pickPivot').classList.remove('active');
+    setInfo(ok ? 'Точка вращения обновлена' : (msg || 'Точка вращения не выбрана'));
+  });
+  $('pickPivot').classList.add('active');
+  setInfo('Тапните место в 3D для точки вращения');
+});
+
+// ---------- ПРИВЯЗКА PDF ----------
 const georef = {
   active: false, pairs: [], pendingUV: null,
   start() {

@@ -3,10 +3,11 @@ import { STYLES, DEFAULT_STYLE } from '../parsers/strParser.js';
 import { worldToPdf } from '../parsers/pdfOverlay.js';
 
 const FONT = '"Times New Roman", Times, serif';
-const fmtZ = z => String(Number(z.toFixed(3)));   // 801.200 -> 801.2
+const fmtZ = z => String(Number(z.toFixed(3)));
 const TXT_STYLE = { kind: 'points', color: '#d02020', size: 3, labelField: 'z' };
+const HL_COLOR = 'rgba(0, 120, 255, 0.7)';
+const HL_EXTRA = 4;
 
-/** Значение поля точки для подписи: 'z' → p.z, 'dN' → p.d[N-1]. */
 function fieldValue(p, field) {
   if (!field) return '';
   if (field === 'z') return fmtZ(p.z);
@@ -18,18 +19,12 @@ function fieldValue(p, field) {
   return '';
 }
 
-/**
- * @param {object} o
- * @param {HTMLCanvasElement} o.canvas
- * @param {() => object} o.getLayers  -> {pdf, str, txt}
- * @param {(text:string) => void} o.onInfo
- * @param {(sx:number, sy:number) => boolean} [o.onTap] true — тап обработан (pick не вызывается)
- */
 export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
   const ctx = cv.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const view = { s: 1, cx: 0, cy: 0, ox: 0, oy: 0 };
   let enabled = true;
+  let highlighted = null;
 
   const dataLayers = () => { const L = getLayers(); return [L.str, L.txt].filter(Boolean); };
 
@@ -103,7 +98,6 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
   }
 
   function drawLayer({ pts, groups }) {
-    // ── Pass 0: линии + стволы скважин ──
     for (const g of groups) {
       const st = STYLES[g.id] || (g.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
 
@@ -126,7 +120,6 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
         }
       }
 
-      // стволы скважин — для любой точки с посчитанным p.drill
       for (const i of g.idx) {
         const p = pts[i];
         if (!p.drill) continue;
@@ -141,26 +134,37 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
       }
     }
 
-    // ── Pass 1: точки поверх линий ──
     for (const g of groups) {
       const st = STYLES[g.id] || (g.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
       if (st.kind !== 'points') continue;
 
       const labelField = st.labelField || (st.labelZ ? 'z' : null);
+      const isDrillGroup = g.idx.some(i => pts[i].drill);
+
       ctx.fillStyle = st.color;
       for (const i of g.idx) {
         const p = pts[i];
+        if (isDrillGroup && !p.drill) continue;
+
         const [sx, sy] = toScreen(p);
         ctx.beginPath();
         ctx.arc(sx, sy, st.size, 0, Math.PI * 2);
         ctx.fill();
+
+        if (p === highlighted) {
+          ctx.strokeStyle = HL_COLOR;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(sx, sy, st.size + HL_EXTRA, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
         if (labelField) {
           const text = fieldValue(p, labelField);
           if (text) {
             ctx.font = `12px ${FONT}`;
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
-            // 4-A: справа сверху от устья
             ctx.fillText(text, sx + st.size + 3, sy - 4);
           }
         }
@@ -192,8 +196,10 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
   function pick(cx, cy) {
     const p = pickPoint(cx, cy);
     if (!p) return;
-    const base = `X ${p.x.toFixed(3)} · Y ${p.y.toFixed(3)} · Z ${p.z.toFixed(3)}`;
+    highlighted = (highlighted === p) ? null : p;
+    draw();
 
+    const base = `X ${p.x.toFixed(3)} · Y ${p.y.toFixed(3)} · Z ${p.z.toFixed(3)}`;
     if (p.drill) {
       const d = p.drill;
       const kind = d.actual ? 'факт' : 'проект';
@@ -201,12 +207,12 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
       onInfo(`Стринг ${p.id} · № ${num} · Азм ${d.az}° · Накл ${d.dip}° · Глуб ${d.depth} м (${kind}) · ${base}`);
       return;
     }
-
     const desc = p.d.map((v, i) => v ? `D${i + 1}=${v}` : '').filter(Boolean).join(' ');
     onInfo(`Стринг ${p.id} · ${base}` + (desc ? ` · ${desc}` : ''));
   }
 
-  // ── Касания: 1 палец — сдвиг, 2 — pinch, короткое касание — pick ──
+  function resetHighlight() { highlighted = null; }
+
   const ps = new Map();
   let pinch0 = null, moved = 0, downAt = 0;
 
@@ -246,16 +252,22 @@ export function createRender2d({ canvas: cv, getLayers, onInfo, onTap }) {
   cv.addEventListener('pointerup', endPointer);
   cv.addEventListener('pointercancel', endPointer);
 
+  // Зум колёсиком в точку курсора
   cv.addEventListener('wheel', e => {
     e.preventDefault();
-    view.s *= e.deltaY < 0 ? 1.1 : 0.9;
+    const k = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const before = toWorld(e.clientX, e.clientY);
+    view.s *= k;
+    const after = toWorld(e.clientX, e.clientY);
+    view.cx += before.x - after.x;
+    view.cy += before.y - after.y;
     draw();
   }, { passive: false });
 
   addEventListener('resize', resize);
 
   return {
-    draw, fit, resize, bounds, pickPoint, screenToPdf,
+    draw, fit, resize, bounds, pickPoint, screenToPdf, resetHighlight,
     setEnabled(v) { enabled = v; cv.style.display = v ? 'block' : 'none'; if (v) resize(); },
   };
 }

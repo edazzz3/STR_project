@@ -17,7 +17,6 @@ html, body {
   background: #fff; box-shadow: 0 -1px 4px #0002; font-size: 14px;
 }
 
-/* Крупные цели касания */
 button, .btn, label.chk, label.switch { min-height: 40px; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; }
 button, .btn {
   padding: 0 14px; border: 1px solid #c5ccd3; border-radius: 8px; background: #f7f9fb;
@@ -25,10 +24,12 @@ button, .btn {
 }
 button:active, .btn:active { background: #e3e8ee; }
 button.active { background: #1e6fe8; border-color: #1e6fe8; color: #fff; }
+button:disabled { opacity: 0.4; cursor: default; }
 .btn input[type=file] { display: none; }
 label.chk input { width: 20px; height: 20px; }
+#pickPivot { font-size: 18px; padding: 0 12px; }
+#pickPivot[hidden] { display: none; }
 
-/* Тумблер 2D/3D */
 label.switch { cursor: pointer; touch-action: manipulation; }
 label.switch input { position: absolute; opacity: 0; pointer-events: none; }
 label.switch .track {
