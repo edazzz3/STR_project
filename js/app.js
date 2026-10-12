@@ -1,10 +1,11 @@
 // Контроллер: состояние слоёв, переключение 2D/3D, обработчики UI, регистрация SW.
 import { parseStr } from './parsers/strParser.js';
 import { parseTxt } from './parsers/txtParser.js';
-import { loadPdf, defaultAffine, solveAffine } from './parsers/pdfOverlay.js';
+import { loadPdf, defaultAffine } from './parsers/pdfOverlay.js';
 import { createRender2d } from './renderers/render2d.js';
 import { createLayersPanel } from './ui/layers.js';
 import { createFieldsModal } from './ui/fields.js';
+import { createGeorefModal } from './ui/georef.js';
 import { state } from './state.js';
 
 const MAX_LAYERS = 10;
@@ -42,6 +43,71 @@ const layersPanel = createLayersPanel({
 const fieldsModal = createFieldsModal({
   onApply: () => { r2.draw(); },
 });
+
+const georefUI = createGeorefModal({
+  onApply: (layer, T, rms, count) => {
+    layer.affine = T;
+    layer.userAffine = true;
+    const warn = rms > 1 ? ' ⚠' : '';
+    setInfo(`PDF привязан · ${count} пар · RMS ${rms.toFixed(3)} м${warn}`);
+    redraw(false);
+  },
+  onRequestPair: () => {
+    georef.waitingFor = 'pdf';
+    georef.pendingUV = null;
+    georefUI.showTip('Тапните место на PDF');
+  },
+  onClose: () => {
+    georef.active = false;
+    georef.waitingFor = null;
+    georef.pendingUV = null;
+    $('georef').classList.remove('active');
+  },
+});
+
+const georef = {
+  active: false, waitingFor: null, pendingUV: null, pdfLayer: null,
+  start() {
+    const pdfLayer = state.layers.find(L => L.kind === 'pdf' && L.visible && !L.locked);
+    if (!pdfLayer) return setInfo('Нет доступного PDF-слоя (видимого и разблокированного)');
+    if (!r2.bounds()) return setInfo('Сначала загрузите STR или TXT');
+    if (state.mode3d) return setInfo('Привязка доступна в режиме 2D');
+    this.active = true;
+    this.waitingFor = null;
+    this.pendingUV = null;
+    this.pdfLayer = pdfLayer;
+    $('georef').classList.add('active');
+    georefUI.open(pdfLayer);
+  },
+  stop(msg) {
+    this.active = false;
+    this.waitingFor = null;
+    this.pendingUV = null;
+    $('georef').classList.remove('active');
+    if (msg) setInfo(msg);
+  },
+  tap(sx, sy) {
+    if (!this.active) return false;
+    if (this.waitingFor === 'pdf') {
+      const uv = r2.screenToPdf(sx, sy, this.pdfLayer);
+      if (!uv) return true;
+      this.pendingUV = uv;
+      this.waitingFor = 'data';
+      georefUI.showTip('Тапните соответствующую точку STR/TXT');
+      return true;
+    }
+    if (this.waitingFor === 'data') {
+      const p = r2.pickPoint(sx, sy);
+      if (!p) { setInfo('Рядом нет точки данных, повторите'); return true; }
+      georefUI.addPair({ ...this.pendingUV, x: p.x, y: p.y });
+      this.pendingUV = null;
+      this.waitingFor = null;
+      return true;
+    }
+    return false;
+  },
+};
+$('georef').addEventListener('click', () => georef.active ? georef.stop('Привязка отменена') : georef.start());
 
 async function readText(file) {
   const buf = await file.arrayBuffer();
@@ -140,7 +206,6 @@ $('fileInput').addEventListener('change', async e => {
 
 $('fit').addEventListener('click', () => redraw(true));
 
-// ---------- ОТОБРАЖЕНИЕ ПОЛЕЙ ----------
 $('fieldsBtn').addEventListener('click', () => fieldsModal.open());
 
 // ---------- 2D / 3D ----------
@@ -169,7 +234,6 @@ $('mode3d').addEventListener('change', async e => {
   }
 });
 
-// ---------- ВЫБОР ТОЧКИ ВРАЩЕНИЯ (3D) ----------
 $('pickPivot').addEventListener('click', async () => {
   if (!state.mode3d) return setInfo('Сначала переключитесь в 3D');
   const r = await get3d();
@@ -181,47 +245,6 @@ $('pickPivot').addEventListener('click', async () => {
   $('pickPivot').classList.add('active');
   setInfo('Тапните место в 3D для точки вращения');
 });
-
-// ---------- ПРИВЯЗКА PDF ----------
-const georef = {
-  active: false, pairs: [], pendingUV: null, pdfLayer: null,
-  start() {
-    const pdfLayer = state.layers.find(L => L.kind === 'pdf' && L.visible && !L.locked);
-    if (!pdfLayer) return setInfo('Нет доступного PDF-слоя (видимого и разблокированного)');
-    if (!r2.bounds()) return setInfo('Сначала загрузите STR или TXT');
-    if (state.mode3d) return setInfo('Привязка доступна в режиме 2D');
-    Object.assign(this, { active: true, pairs: [], pendingUV: null, pdfLayer });
-    $('georef').classList.add('active');
-    setInfo('Привязка 1/2: тапните место на PDF');
-  },
-  stop(msg) {
-    this.active = false;
-    $('georef').classList.remove('active');
-    if (msg) setInfo(msg);
-  },
-  tap(sx, sy) {
-    if (!this.pendingUV) {
-      const uv = r2.screenToPdf(sx, sy, this.pdfLayer);
-      if (!uv) return true;
-      this.pendingUV = uv;
-      setInfo(`Привязка ${this.pairs.length + 1}/2: тапните соответствующую точку STR/TXT`);
-      return true;
-    }
-    const p = r2.pickPoint(sx, sy);
-    if (!p) { setInfo('Рядом нет точки данных, повторите'); return true; }
-    this.pairs.push({ ...this.pendingUV, x: p.x, y: p.y });
-    this.pendingUV = null;
-    if (this.pairs.length < 2) {
-      setInfo('Привязка 2/2: тапните второе место на PDF');
-      return true;
-    }
-    const T = solveAffine(this.pairs);
-    if (T) { this.pdfLayer.affine = T; this.pdfLayer.userAffine = true; this.stop('PDF привязан'); redraw(false); }
-    else this.stop('Не удалось привязать: точки совпадают');
-    return true;
-  },
-};
-$('georef').addEventListener('click', () => georef.active ? georef.stop('Привязка отменена') : georef.start());
 
 // ---------- PWA ----------
 if ('serviceWorker' in navigator) {

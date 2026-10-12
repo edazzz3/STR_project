@@ -39,7 +39,7 @@
 <div id="info">Откройте файл .str (кнопка Импорт)</div>
 <div id="loader" hidden><div class="spinner"></div><span>Загрузка 3D…</span></div>
 
-<!-- Модальное окно полей -->
+<!-- Модал полей -->
 <div id="fieldsModal" hidden>
   <div class="modal-backdrop"></div>
   <div class="modal-body">
@@ -65,6 +65,29 @@
       </div>
     </div>
   </div>
+</div>
+
+<!-- Модал привязки PDF -->
+<div id="georefModal" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-body">
+    <div class="modal-title">Привязка PDF</div>
+    <div class="modal-list" id="georefList"></div>
+    <div class="modal-rms" id="georefRms"></div>
+    <div class="modal-actions">
+      <button id="georefCancel">Отмена</button>
+      <div class="modal-actions-right">
+        <button id="georefAdd">Добавить пару</button>
+        <button id="georefApply" class="primary" disabled>Применить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Плавающая подсказка -->
+<div id="georefTip" hidden>
+  <span id="georefTipText"></span>
+  <button id="georefTipCancel">Отмена</button>
 </div>
 
 <script type="module" src="js/app.js"></script>

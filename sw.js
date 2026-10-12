@@ -4,7 +4,7 @@ const CACHE = 'str-viewer-v4';
 const SHELL = [
   './', './index.html', './manifest.json', './css/style.css',
   './js/app.js', './js/state.js',
-  './js/ui/layers.js', './js/ui/fields.js',
+  './js/ui/layers.js', './js/ui/fields.js', './js/ui/georef.js',
   './js/parsers/strParser.js', './js/parsers/txtParser.js', './js/parsers/pdfOverlay.js',
   './js/renderers/render2d.js', './js/renderers/render3d.js', './js/renderers/pivot.js',
   './js/renderers/input.js',

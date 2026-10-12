@@ -4,7 +4,6 @@
 
 const RENDER_SCALE = 2;
 
-/** Загружает первую страницу PDF и рендерит её в canvas. */
 export async function loadPdf(file) {
   const lib = window.pdfjsLib;
   if (!lib) throw new Error('pdf.js не загружен');
@@ -18,7 +17,6 @@ export async function loadPdf(file) {
   return { canvas, width: canvas.width, height: canvas.height, name: file.name, affine: null };
 }
 
-/** Преобразование по умолчанию: растянуть PDF по ширине bbox данных (или 1:1, если данных нет). */
 export function defaultAffine(pdf, bbox) {
   if (!bbox) return { a: 1, b: 0, c: 0, d: -1, e: 0, f: 0 };
   const k = ((bbox.maxX - bbox.minX) || 1) / pdf.width;
@@ -28,7 +26,9 @@ export function defaultAffine(pdf, bbox) {
 
 /**
  * Аффинное преобразование по парам точек.
- * @param {Array<{u,v,x,y}>} pairs 2 пары → подобие (сдвиг+поворот+масштаб), 3 пары → полное аффинное
+ *  2 пары  → подобие (сдвиг + поворот + общий масштаб)
+ *  3+ пар  → полное аффинное через МНК (наименьшие квадраты)
+ * @param {Array<{u,v,x,y}>} pairs
  * @returns {object|null}
  */
 export function solveAffine(pairs) {
@@ -37,26 +37,51 @@ export function solveAffine(pairs) {
     const du = q.u - p.u, dv = q.v - p.v, dx = q.x - p.x, dy = q.y - p.y;
     const n = du * du + dv * dv;
     if (n < 1e-12) return null;
-    // комплексное k = (dx + i·dy) / (du + i·dv)
     const kr = (dx * du + dy * dv) / n, ki = (dy * du - dx * dv) / n;
     return { a: kr, b: -ki, c: ki, d: kr,
              e: p.x - (kr * p.u - ki * p.v), f: p.y - (ki * p.u + kr * p.v) };
   }
   if (pairs.length >= 3) {
-    const [p, q, r] = pairs;
-    const det = (m) => m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
-    const M = [p.u, p.v, 1, q.u, q.v, 1, r.u, r.v, 1];
-    const D = det(M);
+    const n = pairs.length;
+    let Suu = 0, Svv = 0, Suv = 0, Su = 0, Sv = 0;
+    let Sux = 0, Svx = 0, Sx = 0;
+    let Suy = 0, Svy = 0, Sy = 0;
+    for (const p of pairs) {
+      Suu += p.u * p.u; Svv += p.v * p.v; Suv += p.u * p.v;
+      Su += p.u; Sv += p.v;
+      Sux += p.u * p.x; Svx += p.v * p.x; Sx += p.x;
+      Suy += p.u * p.y; Svy += p.v * p.y; Sy += p.y;
+    }
+    const A = [Suu, Suv, Su, Suv, Svv, Sv, Su, Sv, n];
+    const det3 = m =>
+      m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+    const D = det3(A);
     if (Math.abs(D) < 1e-12) return null;
-    const solve = (t) => {   // правая часть t = [t1,t2,t3], правило Крамера
-      const col = i => { const m = M.slice(); for (let j = 0; j < 3; j++) m[j * 3 + i] = t[j]; return det(m) / D; };
+    const solve3 = (b) => {
+      const col = i => {
+        const m = [...A];
+        m[i] = b[0]; m[i + 3] = b[1]; m[i + 6] = b[2];
+        return det3(m) / D;
+      };
       return [col(0), col(1), col(2)];
     };
-    const [a, b, e] = solve([p.x, q.x, r.x]);
-    const [c, d, f] = solve([p.y, q.y, r.y]);
+    const [a, b, e] = solve3([Sux, Svx, Sx]);
+    const [c, d, f] = solve3([Suy, Svy, Sy]);
     return { a, b, c, d, e, f };
   }
   return null;
+}
+
+/** RMS-ошибка (в единицах мировых координат) для преобразования T и набора пар. */
+export function computeRMS(T, pairs) {
+  if (!T || !pairs.length) return null;
+  let sum = 0;
+  for (const p of pairs) {
+    const px = T.a * p.u + T.b * p.v + T.e;
+    const py = T.c * p.u + T.d * p.v + T.f;
+    sum += (px - p.x) ** 2 + (py - p.y) ** 2;
+  }
+  return Math.sqrt(sum / pairs.length);
 }
 
 export const pdfToWorld = (T, u, v) => ({ x: T.a * u + T.b * v + T.e, y: T.c * u + T.d * v + T.f });
