@@ -11,4 +11,8 @@ export const state = {
   activeId: null,
   mode3d: false,
   labelConfig: {},
+  crs: {
+    from: 'local',
+    to: 'local',
+  },
 };

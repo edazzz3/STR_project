@@ -88,6 +88,7 @@ export function createRender3d({ canvas }) {
   function build(layers) {
     clear();
     pivot.reset();
+    camera.up.set(0, 1, 0);
 
     const sets = layers.filter(L => (L.kind === 'str' || L.kind === 'txt') && L.visible);
     const all = sets.flatMap(L => L.pts);
@@ -134,6 +135,28 @@ export function createRender3d({ canvas }) {
     controls.update();
   }
 
+  // Установка фиксированного вида камеры относительно текущего controls.target.
+  // Дистанция камеры сохраняется. После установки пользователь свободно вращает.
+  function setView(kind) {
+    const target = controls.target.clone();
+    const dist = camera.position.distanceTo(target) || 100;
+
+    // Сброс up — если ранее был "top", возвращаем стандартный up.
+    camera.up.set(0, 1, 0);
+
+    if (kind === 'top') {
+      // Вид в плане: камера сверху, север вверх (в Three.js +Z = юг, -Z = север).
+      camera.up.set(0, 0, -1);
+      camera.position.set(target.x, target.y + dist, target.z);
+    } else if (kind === 'east') {
+      // Вид с востока: камера справа от target (X = восток), смотрит на запад.
+      camera.position.set(target.x + dist, target.y, target.z);
+    }
+
+    camera.lookAt(target);
+    controls.update();
+  }
+
   function loop() {
     if (!active) return;
     requestAnimationFrame(loop);
@@ -142,7 +165,7 @@ export function createRender3d({ canvas }) {
   }
 
   return {
-    build, resize,
+    build, resize, setView,
     startPivot: pivot.start,
     cancelPivot: pivot.cancel,
     isPivotPicking: pivot.isPicking,

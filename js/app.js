@@ -1,23 +1,19 @@
-// Контроллер: состояние слоёв, переключение 2D/3D, обработчики UI, регистрация SW.
-import { parseStr } from './parsers/strParser.js';
-import { parseTxt } from './parsers/txtParser.js';
-import { loadPdf, defaultAffine } from './parsers/pdfOverlay.js';
+// Точка входа: связывает модули, обработчики UI, переключение 2D/3D, регистрация SW.
+import { defaultAffine } from './parsers/pdfOverlay.js';
 import { createRender2d } from './renderers/render2d.js';
 import { createLayersPanel } from './ui/layers.js';
 import { createFieldsModal } from './ui/fields.js';
 import { createGeorefModal } from './ui/georef.js';
 import { createPdfPagesModal } from './ui/pdfPages.js';
+import { createImportHandler } from './ui/importFiles.js';
 import { state } from './state.js';
 
-const MAX_LAYERS = 10;
 const $ = id => document.getElementById(id);
 const infoEl = $('info');
 const swapEl = $('swap');
 const setInfo = t => { infoEl.textContent = t; };
 
 let r3 = null;
-let uid = 0;
-const newLayerId = () => 'L' + (++uid) + '_' + Date.now();
 
 function syncSidebarBounds() {
   const sb = $('sidebar');
@@ -54,7 +50,6 @@ const georefUI = createGeorefModal({
     layer.userAffine = true;
     const warn = rms > 1 ? ' ⚠' : '';
     setInfo(`PDF привязан · ${count} пар · RMS ${rms.toFixed(3)} м${warn}`);
-    // Если данных не было — вписываем PDF в экран после привязки
     if (hadData) redraw(false); else redraw(true);
   },
   onRequestPair: () => {
@@ -141,20 +136,6 @@ const georef = {
 };
 $('georef').addEventListener('click', () => georef.active ? georef.stop('Привязка отменена') : georef.start());
 
-async function readText(file) {
-  const buf = await file.arrayBuffer();
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
-  catch { return new TextDecoder('windows-1251').decode(buf); }
-}
-
-function summary() {
-  if (!state.layers.length) return 'Нет слоёв. Нажмите «Импорт» для загрузки.';
-  const parts = state.layers.map(L => L.kind === 'pdf'
-    ? `PDF: ${L.name}${L.pageNum ? ` (лист ${L.pageNum})` : ''}`
-    : `${L.name}: точек ${L.pts.length}, линий ${L.groups.length}`);
-  return parts.join(' | ') + '. Нажмите на точку, чтобы увидеть данные.';
-}
-
 async function get3d() {
   if (!r3) {
     const { createRender3d } = await import('./renderers/render3d.js');
@@ -181,89 +162,39 @@ async function redraw(refit) {
 }
 
 // ---------- ИМПОРТ ----------
+const handleImport = createImportHandler({
+  state, r2, pdfPagesModal, layersPanel, setInfo, redraw, recomputePdfAffine,
+  reset3dPivot: () => { if (r3) r3.resetPivot(); },
+});
+
 $('fileInput').addEventListener('change', async e => {
-  const files = [...e.target.files];
-  if (!files.length) return;
-  const swap = swapEl.checked;
-  let lastErr = '';
-
-  for (const f of files) {
-    if (state.layers.length >= MAX_LAYERS) {
-      lastErr = `Достигнут лимит ${MAX_LAYERS} слоёв`;
-      break;
-    }
-    const ext = (f.name.split('.').pop() || '').toLowerCase();
-    try {
-      if (ext === 'pdf') {
-        setInfo('Загрузка PDF…');
-        const tmpLib = window.pdfjsLib;
-        if (!tmpLib) throw new Error('pdf.js не загружен');
-        const doc = await tmpLib.getDocument({ data: await f.arrayBuffer() }).promise;
-        const pageCount = doc.numPages;
-
-        let pages = [1];
-        if (pageCount > 1) {
-          const chosen = await pdfPagesModal.open(pageCount);
-          if (!chosen) { continue; }
-          pages = chosen;
-        }
-
-        for (const pageNum of pages) {
-          if (state.layers.length >= MAX_LAYERS) {
-            lastErr = `Достигнут лимит ${MAX_LAYERS} слоёв`;
-            break;
-          }
-          const pdf = await loadPdf(f, pageNum);
-          state.layers.push({
-            id: newLayerId(), kind: 'pdf',
-            name: pageCount > 1 ? `${f.name} (лист ${pageNum})` : f.name,
-            pageNum, pageCount,
-            visible: true, locked: false,
-            canvas: pdf.canvas, width: pdf.width, height: pdf.height,
-            affine: null, userAffine: false,
-          });
-        }
-      } else if (ext === 'str') {
-        const text = await readText(f);
-        const parsed = parseStr(text, false);
-        state.layers.push({
-          id: newLayerId(), kind: 'str', name: f.name,
-          visible: true, locked: false,
-          pts: parsed.pts, groups: parsed.groups,
-        });
-      } else if (ext === 'dwg' || ext === 'dxf') {
-        lastErr = `«${f.name}»: формат не поддерживается`;
-      } else {
-        const text = await readText(f);
-        const parsed = parseTxt(text, swap);
-        state.layers.push({
-          id: newLayerId(), kind: 'txt', name: f.name,
-          visible: true, locked: false,
-          pts: parsed.pts, groups: parsed.groups,
-        });
-      }
-    } catch (err) {
-      lastErr = `«${f.name}»: ${err.message}`;
-    }
-  }
-
-  recomputePdfAffine();
-  r2.resetHighlight();
-  if (r3) r3.resetPivot();
-  layersPanel.render();
-  setInfo(lastErr || summary());
-  redraw(true);
+  await handleImport(e.target.files, swapEl.checked);
   e.target.value = '';
 });
 
 $('fit').addEventListener('click', () => redraw(true));
-
 $('fieldsBtn').addEventListener('click', () => fieldsModal.open());
+
+// ---------- ВИДЫ (3D) ----------
+async function applyView(kind) {
+  if (!state.mode3d) return;
+  try {
+    const r = await get3d();
+    r.setView(kind);
+  } catch (err) {
+    setInfo('Вид: ' + err.message);
+  }
+}
+$('viewTop').addEventListener('click', () => applyView('top'));
+$('viewEast').addEventListener('click', () => applyView('east'));
 
 // ---------- 2D / 3D ----------
 $('mode3d').addEventListener('change', async e => {
   state.mode3d = e.target.checked;
   r2.setEnabled(!state.mode3d);
+  $('viewTop').hidden = !state.mode3d;
+  $('viewEast').hidden = !state.mode3d;
+
   if (state.mode3d) {
     const loader = $('loader');
     loader.hidden = false;
@@ -276,6 +207,8 @@ $('mode3d').addEventListener('change', async e => {
     } catch (err) {
       setInfo('3D недоступен: ' + err.message);
       state.mode3d = false; e.target.checked = false; r2.setEnabled(true);
+      $('viewTop').hidden = true;
+      $('viewEast').hidden = true;
     } finally {
       loader.hidden = true;
     }

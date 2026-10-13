@@ -294,3 +294,4 @@ label.switch input:checked + .track::after { transform: translateX(20px); }
   background: #eef1f4; padding: 1px 4px; border-radius: 3px;
   font-family: ui-monospace, monospace; font-size: 12px;
 }
+button[hidden] { display: none !important; }
