@@ -136,9 +136,11 @@ export function parseStr(text, swap = false) {
 
   // ── Скважины: считаем стволы по D9/D10/D23/D4 ──
   for (const p of pts) {
-    const drill = computeDrill(p);
-    if (drill) p.drill = drill;
-  }
+  const st = STYLES[p.id];
+  if (!st || st.kind !== 'points') continue;   // ← только point-стринги
+  const drill = computeDrill(p);
+  if (drill) p.drill = drill;
+}
 
   // подпись в центре контура (D-поле) — один раз
   for (const g of groups) {

@@ -39,7 +39,6 @@
 <div id="info">Откройте файл .str (кнопка Импорт)</div>
 <div id="loader" hidden><div class="spinner"></div><span>Загрузка 3D…</span></div>
 
-<!-- Модал полей -->
 <div id="fieldsModal" hidden>
   <div class="modal-backdrop"></div>
   <div class="modal-body">
@@ -67,24 +66,66 @@
   </div>
 </div>
 
-<!-- Модал привязки PDF -->
 <div id="georefModal" hidden>
   <div class="modal-backdrop"></div>
   <div class="modal-body">
-    <div class="modal-title">Привязка PDF</div>
-    <div class="modal-list" id="georefList"></div>
-    <div class="modal-rms" id="georefRms"></div>
-    <div class="modal-actions">
-      <button id="georefCancel">Отмена</button>
-      <div class="modal-actions-right">
-        <button id="georefAdd">Добавить пару</button>
-        <button id="georefApply" class="primary" disabled>Применить</button>
+    <div class="modal-tabs">
+      <button class="modal-tab active" data-tab="manual">Ручная</button>
+      <button class="modal-tab" data-tab="angle">По углам</button>
+    </div>
+
+    <div class="modal-tab-content" id="georefManual">
+      <div class="modal-list" id="georefList"></div>
+      <div class="modal-rms" id="georefRms"></div>
+      <div class="modal-actions">
+        <button id="georefCancel">Отмена</button>
+        <div class="modal-actions-right">
+          <button id="georefAdd">Добавить пару</button>
+          <button id="georefApply" class="primary" disabled>Применить</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-tab-content" id="georefAngle" hidden>
+      <div class="angle-pit-bar">
+        <label>Карьер:
+          <select id="anglePit">
+            <option value="VI">ВИ</option>
+            <option value="B2">Б2</option>
+          </select>
+        </label>
+      </div>
+      <div class="angle-list" id="angleList"></div>
+      <div class="grid-hint">
+        Минимум 3 точки (углы сетки). Тапайте точно по перекрестию линий сетки на PDF.
+        Координаты подставлены по умолчанию — правьте при необходимости.
+      </div>
+      <div class="modal-rms" id="angleRms"></div>
+      <div class="modal-actions">
+        <button id="angleAdd">Добавить пару</button>
+        <div class="modal-actions-right">
+          <button id="angleChain">Указать точки</button>
+          <button id="angleApply" class="primary" disabled>Применить</button>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Плавающая подсказка -->
+<div id="pdfPagesModal" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-body">
+    <div class="modal-title">Какую страницу загрузить?</div>
+    <div class="modal-list" id="pdfPagesList"></div>
+    <div class="modal-actions">
+      <button id="pdfPagesCancel">Отмена</button>
+      <div class="modal-actions-right">
+        <button id="pdfPagesOk" class="primary">Загрузить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="georefTip" hidden>
   <span id="georefTipText"></span>
   <button id="georefTipCancel">Отмена</button>

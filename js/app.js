@@ -6,6 +6,7 @@ import { createRender2d } from './renderers/render2d.js';
 import { createLayersPanel } from './ui/layers.js';
 import { createFieldsModal } from './ui/fields.js';
 import { createGeorefModal } from './ui/georef.js';
+import { createPdfPagesModal } from './ui/pdfPages.js';
 import { state } from './state.js';
 
 const MAX_LAYERS = 10;
@@ -44,66 +45,97 @@ const fieldsModal = createFieldsModal({
   onApply: () => { r2.draw(); },
 });
 
+const pdfPagesModal = createPdfPagesModal();
+
 const georefUI = createGeorefModal({
   onApply: (layer, T, rms, count) => {
+    const hadData = !!r2.bounds();
     layer.affine = T;
     layer.userAffine = true;
     const warn = rms > 1 ? ' ⚠' : '';
     setInfo(`PDF привязан · ${count} пар · RMS ${rms.toFixed(3)} м${warn}`);
-    redraw(false);
+    // Если данных не было — вписываем PDF в экран после привязки
+    if (hadData) redraw(false); else redraw(true);
   },
   onRequestPair: () => {
-    georef.waitingFor = 'pdf';
+    if (!r2.bounds()) {
+      setInfo('Для ручной привязки нужны слои STR или TXT. Используйте вкладку «По углам».');
+      return;
+    }
+    georef.mode = 'manual';
     georef.pendingUV = null;
     georefUI.showTip('Тапните место на PDF');
   },
+  onRequestAnglePair: (pair) => {
+    georef.mode = 'angle';
+    georef.anglePair = pair;
+    georef.active = true;
+    $('georef').classList.add('active');
+    georefUI.showTip(`Тапните на PDF: ${pair.label}`);
+  },
   onClose: () => {
     georef.active = false;
-    georef.waitingFor = null;
+    georef.mode = null;
     georef.pendingUV = null;
+    georef.anglePair = null;
     $('georef').classList.remove('active');
   },
 });
 
 const georef = {
-  active: false, waitingFor: null, pendingUV: null, pdfLayer: null,
+  active: false, mode: null, pendingUV: null, anglePair: null, pdfLayer: null,
+
   start() {
     const pdfLayer = state.layers.find(L => L.kind === 'pdf' && L.visible && !L.locked);
     if (!pdfLayer) return setInfo('Нет доступного PDF-слоя (видимого и разблокированного)');
-    if (!r2.bounds()) return setInfo('Сначала загрузите STR или TXT');
     if (state.mode3d) return setInfo('Привязка доступна в режиме 2D');
     this.active = true;
-    this.waitingFor = null;
+    this.mode = null;
     this.pendingUV = null;
+    this.anglePair = null;
     this.pdfLayer = pdfLayer;
     $('georef').classList.add('active');
     georefUI.open(pdfLayer);
   },
+
   stop(msg) {
     this.active = false;
-    this.waitingFor = null;
+    this.mode = null;
     this.pendingUV = null;
+    this.anglePair = null;
     $('georef').classList.remove('active');
     if (msg) setInfo(msg);
   },
+
   tap(sx, sy) {
     if (!this.active) return false;
-    if (this.waitingFor === 'pdf') {
-      const uv = r2.screenToPdf(sx, sy, this.pdfLayer);
-      if (!uv) return true;
-      this.pendingUV = uv;
-      this.waitingFor = 'data';
-      georefUI.showTip('Тапните соответствующую точку STR/TXT');
-      return true;
-    }
-    if (this.waitingFor === 'data') {
+
+    if (this.mode === 'manual') {
+      if (!this.pendingUV) {
+        const uv = r2.screenToPdf(sx, sy, this.pdfLayer);
+        if (!uv) return true;
+        this.pendingUV = uv;
+        georefUI.showTip('Тапните соответствующую точку STR/TXT');
+        return true;
+      }
       const p = r2.pickPoint(sx, sy);
       if (!p) { setInfo('Рядом нет точки данных, повторите'); return true; }
       georefUI.addPair({ ...this.pendingUV, x: p.x, y: p.y });
       this.pendingUV = null;
-      this.waitingFor = null;
+      this.mode = null;
       return true;
     }
+
+    if (this.mode === 'angle' && this.anglePair) {
+      const uv = r2.screenToPdf(sx, sy, this.pdfLayer);
+      if (!uv) return true;
+      const pair = this.anglePair;
+      this.anglePair = null;
+      this.mode = null;
+      georefUI.completeAnglePair(pair, uv.u, uv.v);
+      return true;
+    }
+
     return false;
   },
 };
@@ -118,7 +150,7 @@ async function readText(file) {
 function summary() {
   if (!state.layers.length) return 'Нет слоёв. Нажмите «Импорт» для загрузки.';
   const parts = state.layers.map(L => L.kind === 'pdf'
-    ? `PDF: ${L.name}`
+    ? `PDF: ${L.name}${L.pageNum ? ` (лист ${L.pageNum})` : ''}`
     : `${L.name}: точек ${L.pts.length}, линий ${L.groups.length}`);
   return parts.join(' | ') + '. Нажмите на точку, чтобы увидеть данные.';
 }
@@ -164,13 +196,33 @@ $('fileInput').addEventListener('change', async e => {
     try {
       if (ext === 'pdf') {
         setInfo('Загрузка PDF…');
-        const pdf = await loadPdf(f);
-        state.layers.push({
-          id: newLayerId(), kind: 'pdf', name: f.name,
-          visible: true, locked: false,
-          canvas: pdf.canvas, width: pdf.width, height: pdf.height,
-          affine: null, userAffine: false,
-        });
+        const tmpLib = window.pdfjsLib;
+        if (!tmpLib) throw new Error('pdf.js не загружен');
+        const doc = await tmpLib.getDocument({ data: await f.arrayBuffer() }).promise;
+        const pageCount = doc.numPages;
+
+        let pages = [1];
+        if (pageCount > 1) {
+          const chosen = await pdfPagesModal.open(pageCount);
+          if (!chosen) { continue; }
+          pages = chosen;
+        }
+
+        for (const pageNum of pages) {
+          if (state.layers.length >= MAX_LAYERS) {
+            lastErr = `Достигнут лимит ${MAX_LAYERS} слоёв`;
+            break;
+          }
+          const pdf = await loadPdf(f, pageNum);
+          state.layers.push({
+            id: newLayerId(), kind: 'pdf',
+            name: pageCount > 1 ? `${f.name} (лист ${pageNum})` : f.name,
+            pageNum, pageCount,
+            visible: true, locked: false,
+            canvas: pdf.canvas, width: pdf.width, height: pdf.height,
+            affine: null, userAffine: false,
+          });
+        }
       } else if (ext === 'str') {
         const text = await readText(f);
         const parsed = parseStr(text, false);

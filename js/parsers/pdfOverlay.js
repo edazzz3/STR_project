@@ -2,19 +2,34 @@
 // Координаты PDF = пиксели отрендеренного canvas (u вправо, v вниз).
 // Аффинное преобразование {a,b,c,d,e,f}: x = a·u + b·v + e;  y = c·u + d·v + f  (x,y — мировые).
 
-const RENDER_SCALE = 2;
+// Качество рендера. A3 при scale 4 → 3368 × 4764 px ≈ 64 МБ RGBA.
+const RENDER_SCALE = 4;
+// Предел по числу пикселей (40 МП ≈ 160 МБ RGBA) — защита от гигантских PDF.
+const MAX_CANVAS_PIXELS = 40_000_000;
 
-export async function loadPdf(file) {
+/** Загружает указанную страницу PDF и рендерит её в canvas. */
+export async function loadPdf(file, pageNum = 1) {
   const lib = window.pdfjsLib;
   if (!lib) throw new Error('pdf.js не загружен');
   const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
-  const page = await doc.getPage(1);
-  const vp = page.getViewport({ scale: RENDER_SCALE });
+  const page = await doc.getPage(pageNum);
+
+  const natural = page.getViewport({ scale: 1 });
+  const naturalPixels = natural.width * natural.height;
+  const maxScale = Math.sqrt(MAX_CANVAS_PIXELS / naturalPixels);
+  const scale = Math.min(RENDER_SCALE, Math.max(1, maxScale));
+
+  const vp = page.getViewport({ scale });
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil(vp.width);
   canvas.height = Math.ceil(vp.height);
   await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-  return { canvas, width: canvas.width, height: canvas.height, name: file.name, affine: null };
+  return {
+    canvas, width: canvas.width, height: canvas.height,
+    name: file.name, pageNum,
+    pageCount: doc.numPages,
+    affine: null,
+  };
 }
 
 export function defaultAffine(pdf, bbox) {
@@ -28,8 +43,6 @@ export function defaultAffine(pdf, bbox) {
  * Аффинное преобразование по парам точек.
  *  2 пары  → подобие (сдвиг + поворот + общий масштаб)
  *  3+ пар  → полное аффинное через МНК (наименьшие квадраты)
- * @param {Array<{u,v,x,y}>} pairs
- * @returns {object|null}
  */
 export function solveAffine(pairs) {
   if (pairs.length === 2) {
@@ -72,7 +85,7 @@ export function solveAffine(pairs) {
   return null;
 }
 
-/** RMS-ошибка (в единицах мировых координат) для преобразования T и набора пар. */
+/** RMS-ошибка (в единицах мировых координат). */
 export function computeRMS(T, pairs) {
   if (!T || !pairs.length) return null;
   let sum = 0;
