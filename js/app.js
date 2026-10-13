@@ -15,6 +15,7 @@ const swapEl = $('swap');
 const setInfo = t => { infoEl.textContent = t; };
 
 let r3 = null;
+let measureMode = false;
 
 function syncSidebarBounds() {
   const sb = $('sidebar');
@@ -142,7 +143,7 @@ $('georef').addEventListener('click', () => georef.active ? georef.stop('При�
 async function get3d() {
   if (!r3) {
     const { createRender3d } = await import('./renderers/render3d.js');
-    r3 = createRender3d({ canvas: $('c3') });
+    r3 = createRender3d({ canvas: $('c3'), onInfo: setInfo });
   }
   return r3;
 }
@@ -179,6 +180,34 @@ $('fit').addEventListener('click', () => redraw(true));
 $('fieldsBtn').addEventListener('click', () => fieldsModal.open());
 $('surveyBtn').addEventListener('click', () => surveyModal.open());
 
+// ---------- ИЗМЕРЕНИЕ ----------
+$('measureBtn').addEventListener('click', async () => {
+  measureMode = !measureMode;
+  $('measureBtn').classList.toggle('active', measureMode);
+
+  if (state.mode3d) {
+    try {
+      const r = await get3d();
+      r.setMeasureMode(measureMode);
+    } catch (err) {
+      setInfo('Измерение: ' + err.message);
+      measureMode = false;
+      $('measureBtn').classList.remove('active');
+    }
+  } else {
+    r2.setMeasureMode(measureMode);
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && measureMode) {
+    measureMode = false;
+    $('measureBtn').classList.remove('active');
+    r2.setMeasureMode(false);
+    if (r3) r3.setMeasureMode(false);
+  }
+});
+
 // ---------- ВИДЫ (3D) ----------
 async function applyView(kind) {
   if (!state.mode3d) return;
@@ -196,6 +225,9 @@ $('viewEast').addEventListener('click', () => applyView('east'));
 $('mode3d').addEventListener('change', async e => {
   state.mode3d = e.target.checked;
   r2.setEnabled(!state.mode3d);
+  r2.setMeasureMode(false);
+  measureMode = false;
+  $('measureBtn').classList.remove('active');
   $('viewTop').hidden = !state.mode3d;
   $('viewEast').hidden = !state.mode3d;
 
@@ -218,6 +250,7 @@ $('mode3d').addEventListener('change', async e => {
     }
   } else if (r3) {
     r3.setEnabled(false);
+    r3.setMeasureMode(false);
     r3.cancelPivot();
     $('pickPivot').classList.remove('active');
   }

@@ -44,7 +44,11 @@ export function createPivot({ canvas, camera, controls, content, getPlaneY }) {
       return;
     }
 
+    // Сдвигаем и камеру, и target на одну и ту же дельту — дистанция сохраняется,
+    // скорость вращения не «прыгает».
+    const delta = new THREE.Vector3().subVectors(pivot, controls.target);
     controls.target.copy(pivot);
+    camera.position.add(delta);
     controls.update();
     callback && callback(true, '');
     finish();

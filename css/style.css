@@ -365,3 +365,8 @@ button[hidden] { display: none !important; }
 .survey-empty {
   text-align: center; color: #9aa5b1; padding: 24px 0 !important;
 }
+#measureBtn.active {
+  background: #ff8800;
+  border-color: #ff8800;
+  color: #fff;
+}

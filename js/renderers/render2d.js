@@ -1,4 +1,4 @@
-// 2D-рендер на canvas: слои PDF (снизу), затем STR и TXT (сверху). Камера, pick.
+// 2D-рендер на canvas: слои PDF (снизу), затем STR и TXT (сверху). Камера, pick, измерения.
 // Жесты и зум — в ./input.js
 import { STYLES, DEFAULT_STYLE } from '../parsers/strParser.js';
 import { worldToPdf } from '../parsers/pdfOverlay.js';
@@ -8,6 +8,9 @@ const FONT = '"Times New Roman", Times, serif';
 const TXT_STYLE = { kind: 'points', color: '#d02020', size: 3 };
 const HL_COLOR = 'rgba(0, 120, 255, 0.7)';
 const HL_EXTRA = 4;
+const MS_COLOR = '#ff8800';
+const MS_ARROW_LEN = 10;
+const MS_ARROW_HALF = 4;
 
 const fmtZ = z => String(Number((+z).toFixed(3)));
 const fmtShort = v => {
@@ -20,6 +23,7 @@ const fmtRound1 = v => {
   if (!Number.isFinite(n)) return String(v);
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 };
+const fmtDist = d => d.toFixed(3) + ' м';
 
 function fieldValue(p, key, round) {
   if (!key) return '';
@@ -42,6 +46,11 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
   const view = { s: 1, cx: 0, cy: 0, ox: 0, oy: 0 };
   let enabled = true;
   let highlighted = null;
+
+  // Измерение
+  let measureActive = false;
+  let measureP1 = null;   // { x, y, z }
+  let measureP2 = null;
 
   const allLayers = () => getLayers() || [];
   const pdfLayers = () => allLayers().filter(L => L.kind === 'pdf' && L.visible && L.affine);
@@ -222,6 +231,78 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
     }
   }
 
+  // ── Отрисовка измерения (линия, стрелки, подпись) ──
+  function drawArrowAt(tipSx, tipSy, dirRad) {
+    const bx = tipSx - Math.cos(dirRad) * MS_ARROW_LEN;
+    const by = tipSy - Math.sin(dirRad) * MS_ARROW_LEN;
+    const px = Math.cos(dirRad + Math.PI / 2) * MS_ARROW_HALF;
+    const py = Math.sin(dirRad + Math.PI / 2) * MS_ARROW_HALF;
+    ctx.beginPath();
+    ctx.moveTo(tipSx, tipSy);
+    ctx.lineTo(bx + px, by + py);
+    ctx.lineTo(bx - px, by - py);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawMeasure() {
+    if (!measureActive) return;
+    if (!measureP1) return;
+
+    const [sx1, sy1] = toScreen(measureP1);
+    // Маркер первой точки — маленькое кольцо
+    ctx.strokeStyle = MS_COLOR;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sx1, sy1, 5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (!measureP2) return;
+
+    const [sx2, sy2] = toScreen(measureP2);
+    const dx = sx2 - sx1;
+    const dy = sy2 - sy1;
+    const lenPx = Math.hypot(dx, dy);
+    if (lenPx < 1) return;
+
+    const dirRad = Math.atan2(dy, dx);
+
+    // Линия — пунктир
+    ctx.save();
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = MS_COLOR;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(sx1, sy1);
+    ctx.lineTo(sx2, sy2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Стрелки — наружу от концов
+    ctx.fillStyle = MS_COLOR;
+    drawArrowAt(sx1, sy1, dirRad + Math.PI);
+    drawArrowAt(sx2, sy2, dirRad);
+
+    // Маркер второй точки
+    ctx.beginPath();
+    ctx.arc(sx2, sy2, 5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Подпись по середине, чуть выше линии
+    const dist = Math.hypot(measureP2.x - measureP1.x, measureP2.y - measureP1.y);
+    const midX = (sx1 + sx2) / 2;
+    const midY = (sy1 + sy2) / 2 - 10;
+    ctx.font = `bold 13px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const label = fmtDist(dist);
+    const w = ctx.measureText(label).width + 10;
+    ctx.fillStyle = 'rgba(255, 136, 0, 0.95)';
+    ctx.fillRect(midX - w / 2, midY - 10, w, 20);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, midX, midY + 1);
+  }
+
   function draw() {
     if (!enabled) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -234,6 +315,8 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
     for (const L of dataLayers()) drawLayer(L);
+
+    drawMeasure();
   }
 
   function pickPoint(cx, cy) {
@@ -269,6 +352,38 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
 
   function resetHighlight() { highlighted = null; }
 
+  function setMeasureMode(v) {
+    measureActive = !!v;
+    measureP1 = null;
+    measureP2 = null;
+    if (measureActive) onInfo('Режим измерения: тапните точку');
+    draw();
+  }
+
+  function handleMeasureTap(cx, cy) {
+    const p = pickPoint(cx, cy);
+    if (!p) {
+      onInfo('Рядом нет точки — тапните по точке данных');
+      return true;
+    }
+    if (!measureP1) {
+      measureP1 = { x: p.x, y: p.y, z: p.z };
+      measureP2 = null;
+      onInfo('Тапните вторую точку');
+    } else if (!measureP2) {
+      measureP2 = { x: p.x, y: p.y, z: p.z };
+      const dist = Math.hypot(measureP2.x - measureP1.x, measureP2.y - measureP1.y);
+      onInfo(`Расстояние в плане: ${fmtDist(dist)}`);
+    } else {
+      // Третий тап — новое измерение
+      measureP1 = { x: p.x, y: p.y, z: p.z };
+      measureP2 = null;
+      onInfo('Тапните вторую точку');
+    }
+    draw();
+    return true;
+  }
+
   createInput({
     canvas: cv,
     getScale: () => view.s,
@@ -283,6 +398,7 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
       draw();
     },
     onTap: (cx, cy) => {
+      if (measureActive) return handleMeasureTap(cx, cy);
       if (onTap && onTap(cx, cy)) return;
       pick(cx, cy);
     },
@@ -292,6 +408,8 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
 
   return {
     draw, fit, resize, bounds, pickPoint, screenToPdf, resetHighlight,
+    setMeasureMode,
+    isMeasureActive: () => measureActive,
     setEnabled(v) { enabled = v; cv.style.display = v ? 'block' : 'none'; if (v) resize(); },
   };
 }
