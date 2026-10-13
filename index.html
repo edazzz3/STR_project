@@ -29,6 +29,7 @@
   <label class="btn">Импорт <input type="file" id="fileInput" multiple></label>
   <label class="chk"><input type="checkbox" id="swap"> swap X/Y</label>
   <button id="fieldsBtn" title="Отображение полей у точек">👁</button>
+  <button id="surveyBtn" title="Промер БВР">БВР</button>
   <label class="switch"><span>2D</span><input type="checkbox" id="mode3d"><span class="track"></span><span>3D</span></label>
   <button id="viewTop" class="view-btn" hidden>План</button>
   <button id="viewEast" class="view-btn" hidden>С востока</button>
@@ -123,6 +124,42 @@
       <button id="pdfPagesCancel">Отмена</button>
       <div class="modal-actions-right">
         <button id="pdfPagesOk" class="primary">Загрузить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="surveyModal" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-body modal-body-wide">
+    <div class="modal-title">Промер БВР</div>
+    <div class="survey-selectors">
+      <label>Слой:
+        <select id="surveyLayer"></select>
+      </label>
+      <label>Стринг:
+        <select id="surveyString"></select>
+      </label>
+    </div>
+    <div class="survey-header" id="surveyHeader"></div>
+    <div class="survey-table-wrap">
+      <table class="survey-table">
+        <thead>
+          <tr>
+            <th>№ скв</th>
+            <th>Факт глубина</th>
+            <th>Проект глубина</th>
+            <th>Факт угол</th>
+          </tr>
+        </thead>
+        <tbody id="surveyTbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button id="surveyExport">Экспорт CSV</button>
+      <button id="surveyExportStr">Экспорт .str</button>
+      <div class="modal-actions-right">
+        <button id="surveyClose">Закрыть</button>
       </div>
     </div>
   </div>

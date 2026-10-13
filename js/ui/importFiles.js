@@ -23,10 +23,6 @@ export function summary(state) {
   return parts.join(' | ') + '. Нажмите на точку, чтобы увидеть данные.';
 }
 
-/**
- * Фабрика обработчика импорта. Замыкает зависимости, возвращает функцию
- * handleFiles(fileList, swap) — её вызывает app.js на change input.
- */
 export function createImportHandler({
   state,
   r2,
@@ -85,6 +81,7 @@ export function createImportHandler({
             id: newLayerId(), kind: 'str', name: f.name,
             visible: true, locked: false,
             pts: parsed.pts, groups: parsed.groups,
+            header: parsed.header,
           });
         } else if (ext === 'dwg' || ext === 'dxf') {
           lastErr = `«${f.name}»: формат не поддерживается`;

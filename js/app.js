@@ -6,6 +6,7 @@ import { createFieldsModal } from './ui/fields.js';
 import { createGeorefModal } from './ui/georef.js';
 import { createPdfPagesModal } from './ui/pdfPages.js';
 import { createImportHandler } from './ui/importFiles.js';
+import { createSurveyModal } from './ui/survey.js';
 import { state } from './state.js';
 
 const $ = id => document.getElementById(id);
@@ -42,6 +43,8 @@ const fieldsModal = createFieldsModal({
 });
 
 const pdfPagesModal = createPdfPagesModal();
+
+const surveyModal = createSurveyModal({ state });
 
 const georefUI = createGeorefModal({
   onApply: (layer, T, rms, count) => {
@@ -174,6 +177,7 @@ $('fileInput').addEventListener('change', async e => {
 
 $('fit').addEventListener('click', () => redraw(true));
 $('fieldsBtn').addEventListener('click', () => fieldsModal.open());
+$('surveyBtn').addEventListener('click', () => surveyModal.open());
 
 // ---------- ВИДЫ (3D) ----------
 async function applyView(kind) {

@@ -119,11 +119,11 @@ label.switch input:checked + .track::after { transform: translateX(20px); }
 .layer-row.hidden-layer { opacity: 0.55; }
 .layer-row .layer-del { color: #c04040; }
 
-#fieldsModal, #georefModal, #pdfPagesModal {
+#fieldsModal, #georefModal, #pdfPagesModal, #surveyModal {
   position: fixed; inset: 0; z-index: 20;
   display: flex; align-items: center; justify-content: center;
 }
-#fieldsModal[hidden], #georefModal[hidden], #pdfPagesModal[hidden] { display: none; }
+#fieldsModal[hidden], #georefModal[hidden], #pdfPagesModal[hidden], #surveyModal[hidden] { display: none; }
 
 .modal-backdrop {
   position: absolute; inset: 0; background: rgba(0, 0, 0, 0.3);
@@ -295,3 +295,73 @@ label.switch input:checked + .track::after { transform: translateX(20px); }
   font-family: ui-monospace, monospace; font-size: 12px;
 }
 button[hidden] { display: none !important; }
+/* ── Модал промера БВР ── */
+.modal-body-wide {
+  min-width: 90vw;
+  max-width: 960px;
+}
+
+.survey-selectors {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #eef1f4;
+}
+.survey-selectors label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px; color: #666;
+}
+.survey-selectors select {
+  min-height: 34px; padding: 4px 8px;
+  border: 1px solid #c5ccd3; border-radius: 6px;
+  font: inherit; font-size: 14px; background: #fff;
+}
+
+.survey-header {
+  padding: 8px 16px; font-size: 12px; color: #666;
+  border-bottom: 1px solid #eef1f4;
+  min-height: 16px;
+}
+
+.survey-table-wrap {
+  flex: 1 1 auto; overflow: auto;
+  max-height: 55vh;
+  padding: 0;
+}
+
+.survey-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 14px;
+}
+.survey-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: #f7f9fb; text-align: left;
+  padding: 8px 10px; font-weight: 600; font-size: 13px;
+  border-bottom: 1px solid #eef1f4;
+}
+.survey-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #f0f2f5;
+  vertical-align: middle;
+}
+.survey-table .survey-num {
+  font-weight: 600; padding-left: 12px; white-space: nowrap;
+}
+.survey-table .survey-project {
+  color: #666; padding-right: 12px; white-space: nowrap;
+}
+.survey-table input {
+  width: 100%; box-sizing: border-box;
+  min-height: 34px; padding: 6px 8px;
+  border: 1px solid #c5ccd3; border-radius: 6px;
+  font: inherit; font-size: 14px;
+  background: #fff;
+}
+.survey-table input:focus {
+  outline: none; border-color: #1e6fe8;
+  box-shadow: 0 0 0 2px rgba(30, 111, 232, 0.15);
+}
+.survey-empty {
+  text-align: center; color: #9aa5b1; padding: 24px 0 !important;
+}

@@ -119,6 +119,7 @@ export function parseStr(text, swap = false) {
   const pts = [], groups = [];
   let cur = null;
   const lines = text.split(/\r?\n/);
+  const header = lines[0] || '';
   for (let n = 1; n < lines.length; n++) {          // строка 0 — заголовок файла
     const f = lines[n].split(',').map(s => s.trim());
     if (f.length < 4) continue;
@@ -136,11 +137,11 @@ export function parseStr(text, swap = false) {
 
   // ── Скважины: считаем стволы по D9/D10/D23/D4 ──
   for (const p of pts) {
-  const st = STYLES[p.id];
-  if (!st || st.kind !== 'points') continue;   // ← только point-стринги
-  const drill = computeDrill(p);
-  if (drill) p.drill = drill;
-}
+    const st = STYLES[p.id];
+    if (!st || st.kind !== 'points') continue;
+    const drill = computeDrill(p);
+    if (drill) p.drill = drill;
+  }
 
   // подпись в центре контура (D-поле) — один раз
   for (const g of groups) {
@@ -152,5 +153,5 @@ export function parseStr(text, swap = false) {
     }
   }
 
-  return { pts, groups };
+  return { pts, groups, header };
 }
