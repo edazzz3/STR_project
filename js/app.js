@@ -11,6 +11,7 @@ import { state } from './state.js';
 
 const $ = id => document.getElementById(id);
 const infoEl = $('info');
+const topEl = $('top');
 const swapEl = $('swap');
 const drawLineEl = $('drawLine');
 const setInfo = t => { infoEl.textContent = t; };
@@ -18,7 +19,7 @@ const setInfo = t => { infoEl.textContent = t; };
 let r3 = null;
 let measureMode = false;
 
-// ── Тема: по умолчанию всегда светлая ──
+// ── Тема ──
 function applyTheme(theme) {
   state.theme = theme;
   document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : '');
@@ -31,18 +32,15 @@ function applyTheme(theme) {
   }
 }
 
-// Всегда светлая при загрузке
-state.theme = 'light';
+// Всегда светлая при загрузке (без вызова applyTheme — r2/r3 ещё не созданы)
 document.documentElement.setAttribute('data-theme', '');
 
 function syncSidebarBounds() {
   const sb = $('sidebar');
-  const topEl = $('top');
-  const infoEl2 = $('info');
-  if (!sb || !topEl || !infoEl2) return;
+  if (!sb || !topEl || !infoEl) return;
 
   const topH = topEl.getBoundingClientRect().height || 0;
-  const infoH = infoEl2.getBoundingClientRect().height || 0;
+  const infoH = infoEl.getBoundingClientRect().height || 0;
 
   sb.style.top = topH + 'px';
   sb.style.bottom = infoH + 'px';
@@ -316,6 +314,6 @@ syncSidebarBounds();
 window.addEventListener('resize', syncSidebarBounds);
 if ('ResizeObserver' in window) {
   const ro = new ResizeObserver(syncSidebarBounds);
-  ro.observe($('top'));
-  ro.observe($('info'));
+  ro.observe(topEl);
+  ro.observe(infoEl);
 }

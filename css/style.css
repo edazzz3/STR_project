@@ -6,14 +6,11 @@
   --text-dim: #64748b;
   --border: #e2e8f0;
   --border-strong: #cbd5e1;
-  --group-bg: rgba(15, 23, 42, 0.035);
-  --group-bg-hover: rgba(15, 23, 42, 0.05);
   --accent-1: #2563eb;
   --accent-2: #6366f1;
-  --accent-grad: linear-gradient(135deg, #2563eb 0%, #6366f1 100%);
+  --accent-grad: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
   --accent-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
 
-  /* Градиенты тулбаров — светлая тема (пастель) */
   --grad-top: linear-gradient(100deg,
     #e0f2fe 0%, #bae6fd 20%, #a5f3fc 45%, #99f6e4 70%, #ccfbf1 100%);
   --grad-info: linear-gradient(80deg,
@@ -35,10 +32,7 @@
   --text-dim: #94a3b8;
   --border: #334155;
   --border-strong: #475569;
-  --group-bg: rgba(255, 255, 255, 0.05);
-  --group-bg-hover: rgba(255, 255, 255, 0.08);
 
-  /* Градиенты тулбаров — тёмная тема (северное сияние) */
   --grad-top: linear-gradient(100deg,
     #0c4a6e 0%, #0369a1 18%, #0e7490 38%, #14b8a6 60%, #0f766e 80%, #134e4a 100%);
   --grad-info: linear-gradient(80deg,
@@ -65,7 +59,7 @@ html, body {
   transition: background .2s, color .2s;
 }
 
-/* ── Тулбар (верхний) ────────────────────────────── */
+/* ── Тулбар ──────────────────────────────────────── */
 #top {
   position: fixed; top: 0; left: 0; right: 0; z-index: 4;
   padding: calc(6px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) 6px calc(10px + env(safe-area-inset-left));
@@ -77,10 +71,10 @@ html, body {
   color: var(--toolbar-text);
 }
 
-/* ── Статус-строка (нижняя) ──────────────────────── */
+/* ── Статус-строка ───────────────────────────────── */
 #info {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 4;
-  padding: 10px calc(12px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
+  padding: 8px calc(12px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
   background: var(--grad-info);
   border-top: 1px solid var(--toolbar-border);
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
@@ -136,7 +130,6 @@ html, body {
   box-shadow: none;
   min-height: 34px;
   padding: 0 8px;
-  color: var(--toolbar-text);
 }
 
 /* ── Кнопки ──────────────────────────────────────── */
@@ -195,20 +188,62 @@ button:disabled { opacity: 0.4; cursor: default; }
   font-size: 11px; font-weight: 800; letter-spacing: 0.04em; line-height: 1;
 }
 
-/* ── Тумблер 2D/3D ───────────────────────────────── */
-label.switch { cursor: pointer; touch-action: manipulation; gap: 6px; font-size: 12px; color: var(--toolbar-text-dim); }
-label.switch input { position: absolute; opacity: 0; pointer-events: none; }
+/* ── Тумблер 2D/3D с текстом внутри ──────────────── */
+label.switch {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+label.switch input {
+  position: absolute; opacity: 0; pointer-events: none;
+  width: 0; height: 0;
+}
 label.switch .track {
-  position: relative; width: 44px; height: 24px; border-radius: 12px;
+  position: relative;
+  width: 56px; height: 28px;
+  border-radius: 14px;
   background: rgba(0, 0, 0, 0.25);
   transition: background .15s;
+  display: block;
+}
+label.switch .track::before {
+  content: '2D';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fff;
+  line-height: 1;
+  pointer-events: none;
 }
 label.switch .track::after {
-  content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%;
-  background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2);
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .15s;
+  box-shadow: 0 1px 2px rgba(0,0,0,.25);
+  z-index: 1;
 }
 label.switch input:checked + .track { background: var(--accent-grad); }
-label.switch input:checked + .track::after { transform: translateX(20px); }
+label.switch input:checked + .track::before {
+  content: '3D';
+  right: auto;
+  left: 8px;
+  color: #fff;
+}
+label.switch input:checked + .track::after {
+  transform: translateX(28px);
+}
 
 /* ── Бейдж-текст (БВР) ───────────────────────────── */
 .badge-text {
@@ -231,7 +266,7 @@ label.switch input:checked + .track::after { transform: translateX(20px); }
   width: 6px; height: 6px;
   border-color: currentColor;
   border-style: solid;
-  opacity: 0.5;
+  opacity: 0.55;
   pointer-events: none;
 }
 .btn-pdf .corner-tl { top: 3px; left: 3px; border-width: 1.5px 0 0 1.5px; }
@@ -267,7 +302,7 @@ label.switch input:checked + .track::after { transform: translateX(20px); }
 /* ── Панель слоёв ────────────────────────────────── */
 #sidebar {
   position: fixed; left: 0; z-index: 5;
-  width: 44px;
+  width: 35px;
   background: var(--grad-sidebar);
   border-right: 1px solid var(--toolbar-border);
   box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
@@ -277,7 +312,7 @@ label.switch input:checked + .track::after { transform: translateX(20px); }
   transition: width .15s;
   color: var(--toolbar-text);
 }
-#sidebar.expanded { width: 240px; }
+#sidebar.expanded { width: 220px; }
 
 .sidebar-icon-btn {
   flex: 0 0 auto;
@@ -339,9 +374,7 @@ label.switch input:checked + .track::after { transform: translateX(20px); }
 }
 .sidebar-header:hover { background: rgba(255, 255, 255, 0.28); border-color: rgba(255, 255, 255, 0.4); }
 
-#sidebar.expanded .sidebar-header-wrap {
-  padding: 8px 10px;
-}
+#sidebar.expanded .sidebar-header-wrap { padding: 8px 10px; }
 #sidebar.expanded .sidebar-header {
   writing-mode: horizontal-tb;
   transform: none;
@@ -587,36 +620,85 @@ label.switch input:checked + .track::after { transform: translateX(20px); }
 .survey-empty { text-align: center; color: var(--text-dim); padding: 24px 0 !important; }
 
 button[hidden] { display: none !important; }
-.view-btn[hidden] { display: none; }
 
-/* ── Мобильный адаптив ───────────────────────────── */
+/* ── Мобильный адаптив (уменьшения только для телефона) ── */
 @media (max-width: 560px) {
   #top {
-    padding: calc(4px + env(safe-area-inset-top)) 6px 4px 6px;
-    gap: 5px;
+    padding: calc(3px + env(safe-area-inset-top)) 5px 3px 5px;
+    gap: 4px;
   }
+  #info {
+    font-size: 11px;
+    padding: 5px calc(8px + env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));
+  }
+
   button, .btn, label.chk-icon, label.switch {
-    min-height: 32px; font-size: 12px;
+    min-height: 30px;
+    font-size: 11px;
   }
-  .toolbar-group { padding: 1px; gap: 1px; border-radius: 10px; }
-  .toolbar-group > * { min-height: 30px !important; }
-  .icon-btn, .chk-icon { min-width: 36px; }
-  .icon-btn svg, .chk-icon svg { width: 18px; height: 18px; }
-  .chk-icon-wide { padding: 0 8px; }
-  .btn-label { font-size: 10px; }
-  .badge-text { padding: 0 9px; font-size: 11px; }
-  .btn-pdf { padding: 0 9px; font-size: 10px; }
-  .btn-pdf .corner { width: 5px; height: 5px; }
-  label.switch { font-size: 11px; gap: 3px; padding: 0 6px; }
-  label.switch .track { width: 32px; height: 18px; border-radius: 9px; }
-  label.switch .track::after { width: 14px; height: 14px; top: 2px; left: 2px; }
-  label.switch input:checked + .track::after { transform: translateX(14px); }
-  #info { font-size: 12px; padding: 8px calc(10px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left)); }
+  button, .btn { padding: 0 8px; }
+
+  .toolbar-group { padding: 1px; gap: 1px; border-radius: 8px; }
+  .toolbar-group > * { min-height: 28px !important; border-radius: 7px; }
+
+  .icon-btn, .chk-icon { min-width: 30px; }
+  .icon-btn svg, .chk-icon svg { width: 16px; height: 16px; }
+
+  .chk-icon-wide { padding: 0 6px; gap: 3px; }
+  .chk-icon-wide svg { width: 13px; height: 13px; }
+  .btn-label { font-size: 9px; letter-spacing: 0; }
+
+  .badge-text { padding: 0 7px; font-size: 10px; letter-spacing: 0; }
+
+  .btn-pdf { padding: 0 8px; font-size: 10px; letter-spacing: 0; }
+  .btn-pdf .corner { width: 4px; height: 4px; }
+  .btn-pdf .corner-tl { top: 2px; left: 2px; border-width: 1px 0 0 1px; }
+  .btn-pdf .corner-tr { top: 2px; right: 2px; border-width: 1px 1px 0 0; }
+  .btn-pdf .corner-bl { bottom: 2px; left: 2px; border-width: 0 0 1px 1px; }
+  .btn-pdf .corner-br { bottom: 2px; right: 2px; border-width: 0 1px 1px 0; }
+
+  /* Тумблер компактнее */
+  label.switch { padding: 0 4px; }
+  label.switch .track { width: 44px; height: 22px; border-radius: 11px; }
+  label.switch .track::before { font-size: 9px; right: 6px; }
+  label.switch .track::after { width: 16px; height: 16px; top: 3px; left: 3px; }
+  label.switch input:checked + .track::after { transform: translateX(22px); }
+  label.switch input:checked + .track::before { left: 6px; }
+
+  /* Сайдбар — узкий */
+  #sidebar { width: 20px; }
+  #sidebar.expanded { width: 120px; }
+
+  .sidebar-icon-btn { min-height: 34px; }
+  .sidebar-icon-btn svg { width: 16px; height: 16px; }
+  #sidebar.expanded .sidebar-icon-btn { min-height: 40px; padding: 0 12px; gap: 8px; }
+
+  .sidebar-header-wrap { padding: 5px 3px; }
+  .sidebar-header {
+    padding: 6px 3px;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    border-radius: 7px;
+  }
+  #sidebar.expanded .sidebar-header { padding: 8px 12px; font-size: 12px; }
+
+  .layer-row { padding: 6px 10px; font-size: 12px; }
 }
 
+/* Очень узкие экраны — ещё компактнее */
 @media (max-width: 380px) {
-  #top { gap: 4px; }
-  button, .btn, label.chk-icon, label.switch { min-height: 30px; }
-  .icon-btn, .chk-icon { min-width: 32px; }
-  .icon-btn svg, .chk-icon svg { width: 16px; height: 16px; }
+  #top { gap: 3px; }
+  button, .btn, label.chk-icon, label.switch { min-height: 28px; }
+  .toolbar-group > * { min-height: 26px !important; }
+  .icon-btn, .chk-icon { min-width: 28px; }
+  .icon-btn svg, .chk-icon svg { width: 14px; height: 14px; }
+  .badge-text { padding: 0 6px; font-size: 9px; }
+  .btn-pdf { padding: 0 6px; font-size: 9px; }
+  label.switch .track { width: 40px; height: 20px; }
+  label.switch .track::after { width: 14px; height: 14px; }
+  label.switch input:checked + .track::after { transform: translateX(20px); }
+  label.switch .track::before { font-size: 8px; right: 5px; }
+  label.switch input:checked + .track::before { left: 5px; }
+  #sidebar { width: 28px; }
+  #sidebar.expanded { width: 180px; }
 }
