@@ -1,6 +1,8 @@
 // Выбор точки вращения в 3D: тап по точке данных или проекция луча на горизонтальную плоскость.
 import * as THREE from 'three';
 
+const PICK_RADIUS_PX = 30;
+
 export function createPivot({ canvas, camera, controls, content, getPlaneY }) {
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
@@ -13,26 +15,35 @@ export function createPivot({ canvas, camera, controls, content, getPlaneY }) {
     ndc.y = -((cy - r.top) / r.height) * 2 + 1;
   }
 
-  function pixelRadius(px) {
-    const dist = camera.position.distanceTo(controls.target);
-    const fovRad = camera.fov * Math.PI / 180;
-    return px * 2 * dist * Math.tan(fovRad / 2) / innerHeight;
+  /** Ищет ближайшую точку данных по ЭКРАННОМУ расстоянию (в пикселях). */
+  function findNearestDataPoint(cx, cy) {
+    const rect = canvas.getBoundingClientRect();
+    let best = null, bestD = PICK_RADIUS_PX;
+    const v = new THREE.Vector3();
+
+    content.traverse(o => {
+      if (!o.isPoints || !o.geometry || !o.geometry.attributes.position) return;
+      const attr = o.geometry.attributes.position;
+      for (let i = 0; i < attr.count; i++) {
+        v.fromBufferAttribute(attr, i);
+        const ndc2 = v.clone().project(camera);
+        if (ndc2.z < -1 || ndc2.z > 1) continue;
+        const sx = (ndc2.x * 0.5 + 0.5) * rect.width + rect.left;
+        const sy = (-ndc2.y * 0.5 + 0.5) * rect.height + rect.top;
+        const d = Math.hypot(sx - cx, sy - cy);
+        if (d < bestD) { bestD = d; best = v.clone(); }
+      }
+    });
+    return best;
   }
 
   function pickAt(cx, cy) {
-    screenToNDC(cx, cy);
-    raycaster.setFromCamera(ndc, camera);
+    let pivot = findNearestDataPoint(cx, cy);
 
-    const pts = [];
-    content.traverse(o => { if (o.isPoints) pts.push(o); });
-    const hits = raycaster.intersectObjects(pts, false);
-    let pivot = null;
-
-    if (hits.length && hits[0].distance < pixelRadius(30)) {
-      pivot = new THREE.Vector3().fromBufferAttribute(
-        hits[0].object.geometry.attributes.position, hits[0].index
-      );
-    } else {
+    if (!pivot) {
+      // Не попали в точку — проекция луча на плоскость Y = getPlaneY()
+      screenToNDC(cx, cy);
+      raycaster.setFromCamera(ndc, camera);
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -getPlaneY());
       const hit = new THREE.Vector3();
       if (raycaster.ray.intersectPlane(plane, hit)) pivot = hit;
@@ -44,7 +55,7 @@ export function createPivot({ canvas, camera, controls, content, getPlaneY }) {
       return;
     }
 
-    // Сдвигаем и камеру, и target на одну и ту же дельту — дистанция сохраняется,
+    // Сдвигаем и target, и камеру на одну и ту же дельту — дистанция сохраняется,
     // скорость вращения не «прыгает».
     const delta = new THREE.Vector3().subVectors(pivot, controls.target);
     controls.target.copy(pivot);

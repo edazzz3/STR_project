@@ -60,6 +60,9 @@ export function createRender3d({ canvas, onInfo }) {
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.zoomToCursor = false;
+  controls.rotateSpeed = 0.5;
+  controls.zoomSpeed = 0.8;
+  controls.panSpeed = 0.6;
 
   const content = new THREE.Group();
   scene.add(content);

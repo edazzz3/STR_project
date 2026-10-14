@@ -25,7 +25,9 @@ export function createInput({ canvas, getScale, onPan, onPinch, onWheelZoom, onT
     } else if (ps.size === 2 && pinch0) {
       const [a, b] = [...ps.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
-      onPinch(pinch0.s * d / pinch0.d);
+      const cx = (a.x + b.x) / 2;
+      const cy = (a.y + b.y) / 2;
+      onPinch(pinch0.s * d / pinch0.d, cx, cy);
     }
   });
 

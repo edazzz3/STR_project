@@ -412,10 +412,9 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
     canvas: cv,
     getScale: () => view.s,
     onPan: (dx, dy) => { view.ox += dx; view.oy += dy; draw(); },
-    onPinch: (s) => { view.s = s; draw(); },
-    onWheelZoom: (cx, cy, factor) => {
+    onPinch: (s, cx, cy) => {
       const before = toWorld(cx, cy);
-      view.s *= factor;
+      view.s = s;
       const after = toWorld(cx, cy);
       view.cx += before.x - after.x;
       view.cy += before.y - after.y;
