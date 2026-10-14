@@ -1,14 +1,15 @@
 // Модал промера БВР: выбор слоя и стринга, таблица ввода факт. глубины и угла.
+// Сортировка по любому столбцу. Автозапятая. Enter → следующая строка.
 import { loadSurvey, saveSurvey, exportSurveyCsv } from '../surveyStore.js';
 import { downloadStrFile } from '../strWriter.js';
 
-/** Автозапятая для глубины. */
+/** Автозапятая для глубины. 0 → завал, 1 → не отбур, 2..9 → X.0, 10..19 → XX.0, 20+ → делим. */
 function autoDepth(raw) {
   if (raw == null) return '';
   const s = String(raw).trim();
   if (s === '') return '';
-  if (s === '0') return 'не отбур';
-  if (s === '1') return 'завал';
+  if (s === '0') return 'завал';
+  if (s === '1') return 'не отбур';
   if (s.includes('.') || s.includes(',')) return s.replace(',', '.');
   const n = +s;
   if (!Number.isFinite(n)) return s;
@@ -74,7 +75,6 @@ function wellKey(p, idx) {
   return num != null && num !== '' ? `n${num}` : `i${idx}`;
 }
 
-/** Прогоняет все сохранённые значения через автозапятую. */
 function formatAllData(data) {
   for (const sid in data) {
     const values = data[sid] || {};
@@ -87,23 +87,93 @@ function formatAllData(data) {
   }
 }
 
+/** Сравнение: пустые всегда в конец (при asc); при desc — в начало. Числа по-числовому. */
+function compareValues(a, b) {
+  const aEmpty = a === '' || a == null;
+  const bEmpty = b === '' || b == null;
+  if (aEmpty && bEmpty) return 0;
+  if (aEmpty) return 1;
+  if (bEmpty) return -1;
+
+  const an = parseFloat(String(a).replace(',', '.'));
+  const bn = parseFloat(String(b).replace(',', '.'));
+  if (Number.isFinite(an) && Number.isFinite(bn)) return an - bn;
+  return String(a).localeCompare(String(b));
+}
+
 export function createSurveyModal({ state }) {
   const modal = document.getElementById('surveyModal');
+  const infoModal = document.getElementById('surveyInfoModal');
   const selLayer = document.getElementById('surveyLayer');
   const selString = document.getElementById('surveyString');
   const header = document.getElementById('surveyHeader');
   const tbody = document.getElementById('surveyTbody');
+  const thead = modal.querySelector('.survey-table thead');
   const btnExport = document.getElementById('surveyExport');
   const btnExportStr = document.getElementById('surveyExportStr');
   const btnClose = document.getElementById('surveyClose');
+  const btnInfo = document.getElementById('surveyInfoBtn');
+  const btnInfoClose = document.getElementById('surveyInfoClose');
   const backdrop = modal.querySelector('.modal-backdrop');
+  const infoBackdrop = infoModal.querySelector('.modal-backdrop');
 
   let currentFileName = null;
   let currentLayer = null;
   let currentStringId = null;
-  let currentWells = [];
+  let currentWells = [];      // источник (порядок из файла)
+  let displayWells = [];      // отсортированная копия для рендера
   let data = {};
 
+  // Сортировка
+  let sortKey = null;   // 'num' | 'depth' | 'project' | 'angle' | null
+  let sortDir = 1;      // 1 — asc, -1 — desc
+
+  // ── Сортировка ──
+  function toggleSort(key) {
+    if (sortKey !== key) {
+      sortKey = key;
+      sortDir = 1;
+    } else if (sortDir === 1) {
+      sortDir = -1;
+    } else {
+      sortKey = null;
+      sortDir = 1;
+    }
+    updateSortIndicators();
+    renderTable();
+  }
+
+  function updateSortIndicators() {
+    thead.querySelectorAll('th[data-sort]').forEach(th => {
+      th.classList.remove('sorted-asc', 'sorted-desc');
+      if (th.dataset.sort === sortKey) {
+        th.classList.add(sortDir === 1 ? 'sorted-asc' : 'sorted-desc');
+      }
+    });
+  }
+
+  function sortWells(arr) {
+    if (!sortKey) return arr;
+    const values = getValues();
+    const copy = [...arr];
+    copy.sort((a, b) => {
+      let va, vb;
+      if (sortKey === 'num') {
+        va = a.num; vb = b.num;
+      } else if (sortKey === 'project') {
+        va = a.projectDepth; vb = b.projectDepth;
+      } else {
+        const av = values[a.key] || {};
+        const bv = values[b.key] || {};
+        va = av[sortKey];
+        vb = bv[sortKey];
+      }
+      return compareValues(va, vb) * sortDir;
+    });
+    return copy;
+  }
+
+  // ── Загрузка ──
   function renderLayerOptions() {
     const layers = getStrLayers(state);
     selLayer.innerHTML = '';
@@ -188,7 +258,7 @@ export function createSurveyModal({ state }) {
   function formatCell(inp) {
     const col = inp.dataset.col;
     const rowIdx = +inp.dataset.row;
-    const w = currentWells[rowIdx];
+    const w = displayWells[rowIdx];
     if (!w) return;
     const raw = inp.value;
     const formatted = col === 'depth' ? autoDepth(raw) : autoAngle(raw);
@@ -201,7 +271,7 @@ export function createSurveyModal({ state }) {
 
   function onInput(inp) {
     const rowIdx = +inp.dataset.row;
-    const w = currentWells[rowIdx];
+    const w = displayWells[rowIdx];
     if (!w) return;
     const values = getValues();
     if (!values[w.key]) values[w.key] = {};
@@ -243,6 +313,7 @@ export function createSurveyModal({ state }) {
 
   function renderTable() {
     tbody.innerHTML = '';
+
     if (!currentWells.length) {
       const tr = document.createElement('tr');
       const td = document.createElement('td');
@@ -252,15 +323,18 @@ export function createSurveyModal({ state }) {
       tr.appendChild(td);
       tbody.appendChild(tr);
       header.textContent = '';
+      displayWells = [];
       return;
     }
+
+    displayWells = sortWells(currentWells);
 
     const block = currentBlockName();
     header.textContent = `Промер блока: ${block || '—'} · Слой: ${currentLayer.name} · Стринг ${currentStringId}`;
 
     const values = getValues();
 
-    currentWells.forEach((w, rowIdx) => {
+    displayWells.forEach((w, rowIdx) => {
       const tr = document.createElement('tr');
 
       const tdNum = document.createElement('td');
@@ -302,13 +376,21 @@ export function createSurveyModal({ state }) {
     rebuild();
   });
 
+  // ── Клик по заголовкам таблицы ──
+  thead.addEventListener('click', e => {
+    const th = e.target.closest('th[data-sort]');
+    if (!th) return;
+    toggleSort(th.dataset.sort);
+  });
+
+  // ── Экспорт ──
   btnExport.addEventListener('click', () => {
     if (!currentLayer || !currentStringId) return;
     tbody.querySelectorAll('input').forEach(inp => formatCell(inp));
     formatAllData(data);
     persist();
     const values = getValues();
-    const wells = currentWells.map(w => ({
+    const wells = (displayWells.length ? displayWells : currentWells).map(w => ({
       num: w.num,
       depth: values[w.key]?.depth || '',
       projectDepth: projectForCsv(w.projectDepth),
@@ -330,6 +412,12 @@ export function createSurveyModal({ state }) {
     downloadStrFile({ layer: currentLayer, data });
   });
 
+  // ── Справка ──
+  btnInfo.addEventListener('click', () => { infoModal.hidden = false; });
+  btnInfoClose.addEventListener('click', () => { infoModal.hidden = true; });
+  infoBackdrop.addEventListener('click', () => { infoModal.hidden = true; });
+
+  // ── Открытие / закрытие ──
   function open() {
     renderLayerOptions();
     const firstLayerId = selLayer.value || (getStrLayers(state)[0]?.id);
@@ -337,6 +425,7 @@ export function createSurveyModal({ state }) {
     renderStringOptions(firstLayerId);
     if (!selString.disabled && selString.options.length) selString.selectedIndex = 0;
     rebuild();
+    updateSortIndicators();
     modal.hidden = false;
   }
 

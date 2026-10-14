@@ -299,25 +299,35 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
     }
   }
 
-  function build(layers) {
+  function build(layers, { preserveCamera = false } = {}) {
+    // Запоминаем текущее положение камеры и цель вращения — на случай,
+    // если пересборка вызвана переключением видимости, а не «показать всё».
+    const prevTarget = controls.target.clone();
+    const prevPos = camera.position.clone();
+    const prevUp = camera.up.clone();
+
     clear();
     pivot.reset();
     clearMeasureVisual();
     camera.up.set(0, 1, 0);
     scene.background = new THREE.Color(themeNow() === 'dark' ? 0x0f172a : 0xf4f6f8);
 
-    const sets = layers.filter(L => (L.kind === 'str' || L.kind === 'txt') && L.visible);
-    const all = sets.flatMap(L => L.pts);
-    if (!all.length) return;
+    // Центр считаем по ВСЕМ точкам (включая скрытые слои и скрытые стринги),
+    // чтобы при переключении видимости мир не смещался.
+    const allLayers = layers.filter(L => L.kind === 'str' || L.kind === 'txt');
+    const allPts = allLayers.flatMap(L => L.pts);
+    if (!allPts.length) return;
 
     let sx = 0, sy = 0, sz = 0;
-    for (const p of all) { sx += p.x; sy += p.y; sz += p.z; }
-    const cx = sx / all.length, cy = sy / all.length, cz = sz / all.length;
+    for (const p of allPts) { sx += p.x; sy += p.y; sz += p.z; }
+    const cx = sx / allPts.length, cy = sy / allPts.length, cz = sz / allPts.length;
     const v = p => new THREE.Vector3(p.x - cx, p.z - cz, -(p.y - cy));
 
     const theme = themeNow();
 
-    for (const L of sets) {
+    // Строим ТОЛЬКО видимые слои (скрытые не попадают в сцену).
+    for (const L of allLayers) {
+      if (!L.visible) continue;
       const { pts, groups } = L;
       for (const g of groups) {
         if (isStreamHidden(g, L)) continue;
@@ -354,13 +364,22 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
       }
     }
 
-    const box = new THREE.Box3().setFromObject(content);
-    const size = box.getSize(new THREE.Vector3()).length() || 100;
-    controls.target.set(0, 0, 0);
-    camera.position.set(size * 0.6, size * 0.6, size * 0.6);
-    camera.near = size / 1000; camera.far = size * 100;
-    camera.updateProjectionMatrix();
-    controls.update();
+    if (preserveCamera) {
+      // Восстанавливаем камеру как было — пользователь не должен замечать пересборку.
+      controls.target.copy(prevTarget);
+      camera.position.copy(prevPos);
+      camera.up.copy(prevUp);
+      controls.update();
+    } else {
+      // Первая загрузка / явный «показать всё» / включение 3D — ставим обзор по всей сцене.
+      const box = new THREE.Box3().setFromObject(content);
+      const size = box.getSize(new THREE.Vector3()).length() || 100;
+      controls.target.set(0, 0, 0);
+      camera.position.set(size * 0.6, size * 0.6, size * 0.6);
+      camera.near = size / 1000; camera.far = size * 100;
+      camera.updateProjectionMatrix();
+      controls.update();
+    }
     updateResolutions();
   }
 

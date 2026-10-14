@@ -21,7 +21,7 @@
 <body>
 
 <div id="sidebar" class="collapsed">
-  <button id="streamsBtn" class="sidebar-icon-btn" title="Видимость стрингов">
+  <button id="streamsBtn" class="sidebar-icon-btn" title="Отключение видимости стрингов">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
       <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
       <circle cx="12" cy="12" r="3"/>
@@ -59,13 +59,23 @@
       <input type="file" id="fileInput" multiple>
     </label>
 
-    <label class="chk-icon chk-icon-wide" title="Поменять X/Y местами">
+    <label class="chk-icon chk-icon-stack" title="Поменять X/Y местами">
       <input type="checkbox" id="swap">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M4 8h14l-3-3"/>
-        <path d="M20 16H6l3 3"/>
+      <svg viewBox="0 0 24 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <!-- верхняя стрелка вправо -->
+        <path d="M4 2h16"/>
+        <path d="m18 0 2 2-2 2"/>
+        <!-- нижняя стрелка влево -->
+        <path d="M4 16h16"/>
+        <path d="m6 14-2 2 2 2"/>
+        <!-- буква X -->
+        <path d="M5.5 6 10.5 12"/>
+        <path d="M10.5 6 5.5 12"/>
+        <!-- буква Y -->
+        <path d="M13.5 6 16 9"/>
+        <path d="M18.5 6 16 9"/>
+        <path d="M16 9v3"/>
       </svg>
-      <span class="btn-label">XY</span>
     </label>
 
     <label class="chk-icon" title="Соединять точки линией">
@@ -264,7 +274,10 @@
 <div id="surveyModal" hidden>
   <div class="modal-backdrop"></div>
   <div class="modal-body modal-body-wide">
-    <div class="modal-title">Промер БВР</div>
+    <div class="modal-title survey-modal-title">
+      Промер БВР
+      <button id="surveyInfoBtn" class="info-btn" type="button" title="Справка">i</button>
+    </div>
     <div class="survey-selectors">
       <label>Слой:
         <select id="surveyLayer"></select>
@@ -278,10 +291,10 @@
       <table class="survey-table">
         <thead>
           <tr>
-            <th>№ скв</th>
-            <th>Факт глубина</th>
-            <th>Проект глубина</th>
-            <th>Факт угол</th>
+            <th data-sort="num">№ скв</th>
+            <th data-sort="depth">Факт глубина</th>
+            <th data-sort="project">Проект глубина</th>
+            <th data-sort="angle">Факт угол</th>
           </tr>
         </thead>
         <tbody id="surveyTbody"></tbody>
@@ -292,6 +305,39 @@
       <button id="surveyExportStr">Экспорт .str</button>
       <div class="modal-actions-right">
         <button id="surveyClose">Закрыть</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="surveyInfoModal" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-body">
+    <div class="modal-title">Справка по промеру БВР</div>
+    <div class="survey-info-body">
+      <h4>Автозапятая</h4>
+      <p>Вводите цифры без точек и запятых — разделитель поставится сам.</p>
+      <ul>
+        <li><code>91</code> → <code>9.1</code></li>
+        <li><code>173</code> → <code>17.3</code></li>
+        <li><code>5</code> → <code>5.0</code></li>
+      </ul>
+
+      <h4>Специальные значения</h4>
+      <ul>
+        <li><code>0</code> → <code>завал</code></li>
+        <li><code>1</code> → <code>не отбур</code></li>
+      </ul>
+
+      <h4>Сортировка</h4>
+      <p>Тапните по заголовку столбца — сортировка по возрастанию. Ещё раз — по убыванию. Третий раз — сброс.</p>
+
+      <h4>Переход между строками</h4>
+      <p>Нажмите Enter — фокус перейдёт к следующей скважине в той же колонке.</p>
+    </div>
+    <div class="modal-actions">
+      <div class="modal-actions-right">
+        <button id="surveyInfoClose" class="primary">Понятно</button>
       </div>
     </div>
   </div>

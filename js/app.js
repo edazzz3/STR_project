@@ -193,7 +193,11 @@ async function redraw(refit) {
   if (refit) r2.fit();
   r2.draw();
   if (state.mode3d) {
-    try { (await get3d()).build(state.layers); }
+    try {
+      // refit=true → сбросить 3D-камеру (первая загрузка / «показать всё»).
+      // refit=false → сохранить текущий вид (переключение видимости слоя / стринга).
+      (await get3d()).build(state.layers, { preserveCamera: !refit });
+    }
     catch (err) { setInfo('3D: ' + err.message); }
   }
 }

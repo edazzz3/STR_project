@@ -1,6 +1,6 @@
 // Оффлайн-кеширование: app shell — поштучно (один 404 не ломает весь install),
 // CDN-библиотеки — при первом использовании.
-const CACHE = 'str-viewer-v6';
+const CACHE = 'str-viewer-v8';
 const SHELL = [
   './', './index.html', './manifest.json', './css/style.css',
   './js/app.js', './js/state.js',

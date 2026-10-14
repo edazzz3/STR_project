@@ -188,6 +188,17 @@ button:disabled { opacity: 0.4; cursor: default; }
   font-size: 11px; font-weight: 800; letter-spacing: 0.04em; line-height: 1;
 }
 
+/* ── Компактный значок XY (стрелки внутри SVG) ──── */
+.chk-icon-stack {
+  flex-direction: column;
+  gap: 0;
+  padding: 0 6px;
+}
+.chk-icon-stack svg {
+  width: 22px;
+  height: 16px;
+}
+
 /* ── Тумблер 2D/3D с текстом внутри ──────────────── */
 label.switch {
   cursor: pointer;
@@ -418,11 +429,15 @@ label.switch input:checked + .track::after {
 .layer-row .layer-del { color: #f87171; }
 
 /* ── Модалки ─────────────────────────────────────── */
-#fieldsModal, #streamsModal, #georefModal, #pdfPagesModal, #surveyModal {
+#fieldsModal, #streamsModal, #georefModal, #pdfPagesModal, #surveyModal, #surveyInfoModal {
   position: fixed; inset: 0; z-index: 20;
   display: flex; align-items: center; justify-content: center;
 }
-#fieldsModal[hidden], #streamsModal[hidden], #georefModal[hidden], #pdfPagesModal[hidden], #surveyModal[hidden] { display: none; }
+#fieldsModal[hidden], #streamsModal[hidden], #georefModal[hidden],
+#pdfPagesModal[hidden], #surveyModal[hidden], #surveyInfoModal[hidden] { display: none; }
+
+/* Info-модал поверх окна БВР */
+#surveyInfoModal { z-index: 30; }
 
 .modal-backdrop {
   position: absolute; inset: 0;
@@ -577,8 +592,15 @@ label.switch input:checked + .track::after {
   font-family: ui-monospace, monospace; font-size: 12px;
 }
 
-.modal-body-wide { min-width: 90vw; max-width: 960px; }
+/* ── Модал промера БВР ───────────────────────────── */
+.modal-body-wide {
+  min-width: 90vw;
+  max-width: 960px;
+  min-height: 0;
+  height: 80vh;
+}
 .survey-selectors {
+  flex: 0 0 auto;
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
   padding: 10px 18px; border-bottom: 1px solid var(--border);
 }
@@ -591,10 +613,17 @@ label.switch input:checked + .track::after {
   font: inherit; font-size: 14px; background: var(--bg-elev); color: var(--text);
 }
 .survey-header {
-  padding: 8px 18px; font-size: 12px; color: var(--text-dim);
-  border-bottom: 1px solid var(--border); min-height: 16px;
+  flex: 0 0 auto;
+  padding: 8px 18px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.survey-table-wrap { flex: 1 1 auto; overflow: auto; max-height: 55vh; padding: 0; }
+.survey-table-wrap { flex: 1 1 auto; overflow: auto; padding: 0; min-height: 0; }
 .survey-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .survey-table thead th {
   position: sticky; top: 0; z-index: 1;
@@ -619,90 +648,178 @@ label.switch input:checked + .track::after {
 }
 .survey-empty { text-align: center; color: var(--text-dim); padding: 24px 0 !important; }
 
+/* ── Заголовок модала промера с кнопкой инфо ── */
+.survey-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  padding: 12px 18px;
+}
+.info-btn {
+  width: 18px; height: 18px;
+  min-height: 0;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  border: 1.5px solid var(--accent-1);
+  background: transparent;
+  color: var(--accent-1);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  font-style: italic;
+  font-family: Georgia, "Times New Roman", serif;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  box-sizing: border-box;
+  transition: background .15s, color .15s;
+}
+.info-btn:hover { background: var(--accent-1); color: #fff; }
+
+/* ── Справка промера ── */
+.survey-info-body {
+  padding: 12px 18px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.55;
+  overflow-y: auto;
+  max-height: 60vh;
+}
+.survey-info-body h4 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-1);
+}
+.survey-info-body h4:first-child { margin-top: 0; }
+.survey-info-body p { margin: 0 0 6px; }
+.survey-info-body ul {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.survey-info-body li { margin: 3px 0; }
+.survey-info-body code {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+/* ── Сортировка в таблице промера ── */
+.survey-table thead th[data-sort] {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.survey-table thead th[data-sort]:hover {
+  background: color-mix(in srgb, var(--text) 10%, var(--bg-elev));
+}
+.survey-table thead th[data-sort]::after {
+  content: ' ⇅';
+  opacity: 0.3;
+  font-size: 11px;
+  margin-left: 2px;
+}
+.survey-table thead th.sorted-asc::after {
+  content: ' ▲';
+  opacity: 1;
+  color: var(--accent-1);
+}
+.survey-table thead th.sorted-desc::after {
+  content: ' ▼';
+  opacity: 1;
+  color: var(--accent-1);
+}
+
 button[hidden] { display: none !important; }
 
 /* ── Мобильный адаптив ───────────────────────────── */
 @media (max-width: 560px) {
   #top {
-    padding: calc(2px + env(safe-area-inset-top)) 3px 2px 3px;
-    gap: 2px;
+    padding: calc(3px + env(safe-area-inset-top)) 5px 3px 5px;
+    gap: 4px;
   }
   #info {
-    font-size: 10px;
-    padding: 4px calc(6px + env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) calc(6px + env(safe-area-inset-left));
+    font-size: 11px;
+    padding: 5px calc(8px + env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));
   }
 
   button, .btn, label.chk-icon, label.switch {
-    min-height: 24px;
-    font-size: 10px;
-    gap: 3px;
+    min-height: 25px;
+    font-size: 12px;
   }
-  button, .btn { padding: 0 5px; }
+  button, .btn { padding: 0 8px; }
 
-  .toolbar-group { padding: 0; gap: 0; border-radius: 6px; }
-  .toolbar-group > * { min-height: 24px !important; border-radius: 5px; }
+  .toolbar-group { padding: 1px; gap: 1px; border-radius: 8px; }
+  .toolbar-group > * { min-height: 28px !important; border-radius: 7px; }
 
-  .icon-btn, .chk-icon { min-width: 26px; }
-  .icon-btn svg, .chk-icon svg { width: 13px; height: 13px; }
+  .icon-btn, .chk-icon { min-width: 30px; }
+  .icon-btn svg, .chk-icon svg { width: 16px; height: 16px; }
 
-  .chk-icon-wide { padding: 0 4px; gap: 2px; }
-  .chk-icon-wide svg { width: 11px; height: 11px; }
-  .btn-label { font-size: 8px; letter-spacing: 0; }
+  .chk-icon-wide { padding: 0 6px; gap: 3px; }
+  .chk-icon-wide svg { width: 13px; height: 13px; }
+  .btn-label { font-size: 9px; letter-spacing: 0; }
 
-  .badge-text { padding: 0 5px; font-size: 9px; letter-spacing: 0; }
+  .chk-icon-stack { padding: 0 5px; }
+  .chk-icon-stack svg { width: 18px; height: 13px; }
 
-  .btn-pdf { padding: 0 5px; font-size: 9px; letter-spacing: 0; }
-  .btn-pdf .corner { width: 3px; height: 3px; }
-  .btn-pdf .corner-tl { top: 1px; left: 1px; }
-  .btn-pdf .corner-tr { top: 1px; right: 1px; }
-  .btn-pdf .corner-bl { bottom: 1px; left: 1px; }
-  .btn-pdf .corner-br { bottom: 1px; right: 1px; }
+  .badge-text { padding: 0 7px; font-size: 10px; letter-spacing: 0; }
+
+  .btn-pdf { padding: 0 8px; font-size: 10px; letter-spacing: 0; }
+  .btn-pdf .corner { width: 4px; height: 4px; }
+  .btn-pdf .corner-tl { top: 2px; left: 2px; border-width: 1px 0 0 1px; }
+  .btn-pdf .corner-tr { top: 2px; right: 2px; border-width: 1px 1px 0 0; }
+  .btn-pdf .corner-bl { bottom: 2px; left: 2px; border-width: 0 0 1px 1px; }
+  .btn-pdf .corner-br { bottom: 2px; right: 2px; border-width: 0 1px 1px 0; }
 
   /* Тумблер компактнее */
-  label.switch { padding: 0 3px; gap: 0; }
-  label.switch .track { width: 36px; height: 18px; border-radius: 9px; }
-  label.switch .track::before { font-size: 8px; right: 5px; }
-  label.switch .track::after { width: 14px; height: 14px; top: 2px; left: 2px; }
-  label.switch input:checked + .track::after { transform: translateX(18px); }
-  label.switch input:checked + .track::before { left: 5px; }
+  label.switch { padding: 0 4px; }
+  label.switch .track { width: 44px; height: 22px; border-radius: 11px; }
+  label.switch .track::before { font-size: 9px; right: 6px; }
+  label.switch .track::after { width: 16px; height: 16px; top: 3px; left: 3px; }
+  label.switch input:checked + .track::after { transform: translateX(22px); }
+  label.switch input:checked + .track::before { left: 6px; }
 
-  /* Сайдбар — как статус-строка по высоте */
-  #sidebar { width: 22px; }
-  #sidebar.expanded { width: 160px; }
+  /* Сайдбар — узкий */
+  #sidebar { width: 15px; }
+  #sidebar.expanded { width: 100px; }
 
-  .sidebar-icon-btn { min-height: 24px; }
-  .sidebar-icon-btn svg { width: 13px; height: 13px; }
-  #sidebar.expanded .sidebar-icon-btn { min-height: 32px; padding: 0 10px; gap: 6px; }
-  .sidebar-icon-label { font-size: 11px; }
+  .sidebar-icon-btn { min-height: 34px; }
+  .sidebar-icon-btn svg { width: 16px; height: 16px; }
+  #sidebar.expanded .sidebar-icon-btn { min-height: 40px; padding: 0 12px; gap: 8px; }
 
-  .sidebar-header-wrap { padding: 4px 1px; }
+  .sidebar-header-wrap { padding: 5px 3px; }
   .sidebar-header {
-    padding: 5px 1px;
-    font-size: 9px;
-    letter-spacing: 0.04em;
-    border-radius: 5px;
+    padding: 6px 3px;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    border-radius: 7px;
   }
-  #sidebar.expanded .sidebar-header-wrap { padding: 5px 6px; }
-  #sidebar.expanded .sidebar-header { padding: 6px 10px; font-size: 11px; }
+  #sidebar.expanded .sidebar-header { padding: 8px 12px; font-size: 12px; }
 
-  .layer-row { padding: 5px 8px; font-size: 11px; }
+  .layer-row { padding: 6px 10px; font-size: 12px; }
 }
 
 /* Очень узкие экраны — ещё компактнее */
 @media (max-width: 380px) {
-  #top { gap: 1px; padding: calc(2px + env(safe-area-inset-top)) 2px 2px 2px; }
-  button, .btn, label.chk-icon, label.switch { min-height: 22px; }
-  .toolbar-group > * { min-height: 22px !important; }
-  .icon-btn, .chk-icon { min-width: 24px; }
-  .icon-btn svg, .chk-icon svg { width: 12px; height: 12px; }
-  .badge-text { padding: 0 4px; font-size: 8px; }
-  .btn-pdf { padding: 0 4px; font-size: 8px; }
-  .btn-label { font-size: 7px; }
-  label.switch .track { width: 32px; height: 16px; }
-  label.switch .track::after { width: 12px; height: 12px; }
-  label.switch input:checked + .track::after { transform: translateX(16px); }
-  label.switch .track::before { font-size: 7px; right: 4px; }
-  label.switch input:checked + .track::before { left: 4px; }
-  #sidebar { width: 20px; }
-  #sidebar.expanded { width: 140px; }
+  #top { gap: 3px; }
+  button, .btn, label.chk-icon, label.switch { min-height: 28px; }
+  .toolbar-group > * { min-height: 26px !important; }
+  .icon-btn, .chk-icon { min-width: 28px; }
+  .icon-btn svg, .chk-icon svg { width: 14px; height: 14px; }
+  .chk-icon-stack svg { width: 16px; height: 11px; }
+  .badge-text { padding: 0 6px; font-size: 9px; }
+  .btn-pdf { padding: 0 6px; font-size: 9px; }
+  label.switch .track { width: 40px; height: 20px; }
+  label.switch .track::after { width: 14px; height: 14px; }
+  label.switch input:checked + .track::after { transform: translateX(20px); }
+  label.switch .track::before { font-size: 8px; right: 5px; }
+  label.switch input:checked + .track::before { left: 5px; }
+  #sidebar { width: 28px; }
+  #sidebar.expanded { width: 180px; }
 }
