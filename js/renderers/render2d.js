@@ -1,7 +1,6 @@
 // 2D-рендер на canvas: слои PDF (снизу), затем STR и TXT (сверху). Камера, pick, измерения.
 // Жесты и зум — в ./input.js
 import { STYLES, DEFAULT_STYLE } from '../parsers/strParser.js';
-import { TXT_FIELDS } from '../parsers/txtParser.js';
 import { worldToPdf } from '../parsers/pdfOverlay.js';
 import { createInput } from './input.js';
 
@@ -11,7 +10,8 @@ const TXT_LINE_STYLE = { kind: 'line', color: '#d02020', width: 2 };
 const TXT_VB_STYLE = { kind: 'line', color: '#000000', width: 2 };
 const TXT_NB_STYLE = { kind: 'line', color: '#000000', width: 1 };
 const TXT_OTM_STYLE = { kind: 'points', color: '#808080', size: 1 };
-const HL_COLOR = 'rgba(0, 120, 255, 0.7)';
+const HL_COLOR_LIGHT = 'rgba(0, 120, 255, 0.7)';
+const HL_COLOR_DARK = 'rgba(96, 165, 250, 0.9)';
 const HL_EXTRA = 4;
 const MS_COLOR = '#ff8800';
 const MS_ARROW_LEN = 10;
@@ -30,15 +30,19 @@ const fmtRound1 = v => {
 };
 const fmtDist = d => d.toFixed(3) + ' м';
 
-function styleFor(g) {
-  if (g.id === 'txt') {
-    if (g.code === 'vb')  return TXT_VB_STYLE;
-    if (g.code === 'nb')  return TXT_NB_STYLE;
-    if (g.code === 'otm') return TXT_OTM_STYLE;
-    return g.kind === 'line' ? TXT_LINE_STYLE : TXT_STYLE;
+/** Адаптирует цвет под тёмную тему: тёмные цвета → светлые. */
+function adaptColor(c, theme) {
+  if (theme !== 'dark') return c;
+  if (!c) return c;
+  const hex = c.startsWith('#') ? c : '#' + c;
+  if (hex.length === 7) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    if (lum < 0.35) return '#e2e8f0';
   }
-  if (STYLES[g.id]) return STYLES[g.id];
-  return DEFAULT_STYLE;
+  return c;
 }
 
 function fieldValue(p, key, round) {
@@ -56,7 +60,7 @@ function fieldValue(p, key, round) {
   return '';
 }
 
-export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, onTap }) {
+export function createRender2d({ canvas: cv, getLayers, getLabelConfig, getTheme, onInfo, onTap }) {
   const ctx = cv.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const view = { s: 1, cx: 0, cy: 0, ox: 0, oy: 0 };
@@ -67,9 +71,30 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
   let measureP1 = null;
   let measureP2 = null;
 
+  const themeNow = () => (getTheme ? getTheme() : 'light');
+
   const allLayers = () => getLayers() || [];
   const pdfLayers = () => allLayers().filter(L => L.kind === 'pdf' && L.visible && L.affine);
   const dataLayers = () => allLayers().filter(L => (L.kind === 'str' || L.kind === 'txt') && L.visible);
+
+  function styleFor(g) {
+    let st;
+    if (g.id === 'txt') {
+      if (g.code === 'vb') st = TXT_VB_STYLE;
+      else if (g.code === 'nb') st = TXT_NB_STYLE;
+      else if (g.code === 'otm') st = TXT_OTM_STYLE;
+      else st = g.kind === 'line' ? TXT_LINE_STYLE : TXT_STYLE;
+    } else if (STYLES[g.id]) {
+      st = STYLES[g.id];
+    } else {
+      st = DEFAULT_STYLE;
+    }
+    const theme = themeNow();
+    if (theme === 'dark' && st.color) {
+      return { ...st, color: adaptColor(st.color, theme) };
+    }
+    return st;
+  }
 
   const labelsFor = (p, g, hasLine) => {
     const cfg = (getLabelConfig() || {})[p.id];
@@ -219,6 +244,7 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
           ctx.font = `12px ${FONT}`;
           ctx.textAlign = 'left';
           ctx.textBaseline = 'middle';
+          ctx.fillStyle = st.color;
           const t1 = fieldValue(p, fields[0], round);
           if (t1) ctx.fillText(t1, sx + st.size + 3, sy - 4);
           if (fields.length > 1) {
@@ -244,7 +270,7 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
         const st = STYLES[highlighted.id] || (highlighted.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
         const baseR = st.kind === 'points' ? st.size : 3;
         const [sx, sy] = toScreen(highlighted);
-        ctx.strokeStyle = HL_COLOR;
+        ctx.strokeStyle = themeNow() === 'dark' ? HL_COLOR_DARK : HL_COLOR_LIGHT;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(sx, sy, baseR + HL_EXTRA, 0, Math.PI * 2);
@@ -322,7 +348,7 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
   function draw() {
     if (!enabled) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#f4f6f8';
+    ctx.fillStyle = themeNow() === 'dark' ? '#0f172a' : '#f4f6f8';
     ctx.fillRect(0, 0, innerWidth, innerHeight);
     ctx.lineJoin = 'round';
 
@@ -420,6 +446,14 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
       view.cy += before.y - after.y;
       draw();
     },
+    onWheelZoom: (cx, cy, factor) => {
+      const before = toWorld(cx, cy);
+      view.s *= factor;
+      const after = toWorld(cx, cy);
+      view.cx += before.x - after.x;
+      view.cy += before.y - after.y;
+      draw();
+    },
     onTap: (cx, cy) => {
       if (measureActive) return handleMeasureTap(cx, cy);
       if (onTap && onTap(cx, cy)) return;
@@ -433,6 +467,7 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
     draw, fit, resize, bounds, pickPoint, screenToPdf, resetHighlight,
     setMeasureMode,
     isMeasureActive: () => measureActive,
+    setTheme() { draw(); },
     setEnabled(v) { enabled = v; cv.style.display = v ? 'block' : 'none'; if (v) resize(); },
   };
 }

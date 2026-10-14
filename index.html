@@ -21,27 +21,136 @@
 <body>
 
 <div id="sidebar" class="collapsed">
-  <div class="sidebar-header">Слои</div>
+  <button id="fieldsBtn" class="sidebar-icon-btn" title="Отображение полей у точек">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+    <span class="sidebar-icon-label">Поля</span>
+  </button>
+
+  <div class="sidebar-header-wrap">
+    <div class="sidebar-header">Слои</div>
+  </div>
+
   <div class="sidebar-body"></div>
 </div>
 
 <div id="top">
-  <label class="btn">Импорт <input type="file" id="fileInput" multiple></label>
-  <label class="chk"><input type="checkbox" id="swap"> swap X/Y</label>
-  <label class="chk"><input type="checkbox" id="drawLine"> линии</label>
-  <button id="fieldsBtn" title="Отображение полей у точек">👁</button>
-  <button id="measureBtn" title="Измерение расстояний">📏</button>
-  <button id="surveyBtn" title="Промер БВР">БВР</button>
-  <label class="switch"><span>2D</span><input type="checkbox" id="mode3d"><span class="track"></span><span>3D</span></label>
-  <button id="viewTop" class="view-btn" hidden>План</button>
-  <button id="viewEast" class="view-btn" hidden>С востока</button>
-  <button id="pickPivot" title="Выбрать точку вращения (3D)">⌖</button>
-  <button id="fit">показать все</button>
-  <button id="georef">Привязать PDF</button>
+
+  <!-- Группа: Импорт -->
+  <div class="toolbar-group" title="Импорт файлов">
+    <label class="btn icon-btn" title="Импорт">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 20h16"/>
+        <path d="M4 20v-8a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v5"/>
+        <path d="M12 3v8"/>
+        <path d="m9 8 3 3 3-3"/>
+      </svg>
+      <input type="file" id="fileInput" multiple>
+    </label>
+
+    <label class="chk-icon chk-icon-wide" title="Поменять X/Y местами">
+      <input type="checkbox" id="swap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 8h14l-3-3"/>
+        <path d="M20 16H6l3 3"/>
+      </svg>
+      <span class="btn-label">XY</span>
+    </label>
+
+    <label class="chk-icon" title="Соединять точки линией">
+      <input type="checkbox" id="drawLine">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 18l4-7 5 4 4-8 3 3"/>
+        <circle cx="4" cy="18" r="1.6" fill="currentColor" stroke="none"/>
+        <circle cx="8" cy="11" r="1.6" fill="currentColor" stroke="none"/>
+        <circle cx="13" cy="15" r="1.6" fill="currentColor" stroke="none"/>
+        <circle cx="17" cy="7" r="1.6" fill="currentColor" stroke="none"/>
+        <circle cx="20" cy="10" r="1.6" fill="currentColor" stroke="none"/>
+      </svg>
+    </label>
+  </div>
+
+  <!-- Группа: Рабочие инструменты -->
+  <div class="toolbar-group" title="Инструменты">
+    <button id="measureBtn" class="icon-btn" title="Измерение расстояний">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="9" width="20" height="6" rx="1"/>
+        <path d="M6 9v3"/>
+        <path d="M10 9v3"/>
+        <path d="M14 9v3"/>
+        <path d="M18 9v3"/>
+      </svg>
+    </button>
+
+    <button id="surveyBtn" class="badge-text" title="Промер БВР">БВР</button>
+
+    <button id="georef" class="btn-pdf" title="Привязать PDF">
+      <span class="corner corner-tl"></span>
+      <span class="corner corner-tr"></span>
+      <span class="corner corner-bl"></span>
+      <span class="corner corner-br"></span>
+      PDF
+    </button>
+  </div>
+
+  <!-- Группа: Ориентирование -->
+  <div class="toolbar-group" title="Ориентирование">
+    <label class="switch" title="2D / 3D">
+      <span>2D</span>
+      <input type="checkbox" id="mode3d">
+      <span class="track"></span>
+      <span>3D</span>
+    </label>
+
+    <button id="viewTop" class="icon-btn" title="Вид в плане" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 20V5"/>
+        <path d="m5 10 5-5 5 5"/>
+        <text x="19" y="13" font-size="9" font-weight="800" fill="currentColor" stroke="none" text-anchor="middle" font-family="system-ui, sans-serif">N</text>
+      </svg>
+    </button>
+
+    <button id="viewEast" class="icon-btn" title="Вид с востока" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 12h15"/>
+        <path d="m14 7 5 5-5 5"/>
+        <text x="5" y="10" font-size="9" font-weight="800" fill="currentColor" stroke="none" text-anchor="middle" font-family="system-ui, sans-serif">E</text>
+      </svg>
+    </button>
+
+    <button id="pickPivot" class="icon-btn" title="Точка вращения (3D)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+        <circle cx="12" cy="12" r="7"/>
+        <path d="M12 3v5"/>
+        <path d="M12 16v5"/>
+        <path d="M3 12h5"/>
+        <path d="M16 12h5"/>
+      </svg>
+    </button>
+
+    <button id="fit" class="icon-btn" title="Показать всё">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 9V5h4"/>
+        <path d="M20 9V5h-4"/>
+        <path d="M4 15v4h4"/>
+        <path d="M20 15v4h-4"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Тема — крайний правый -->
+  <button id="themeBtn" class="icon-btn theme-btn" title="Светлая / тёмная тема">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+    </svg>
+  </button>
 </div>
+
 <canvas id="c"></canvas>
 <canvas id="c3"></canvas>
-<div id="info">Откройте файл .str (кнопка Импорт)</div>
+<div id="info">Откройте файл .str (кнопка импорта)</div>
 <div id="loader" hidden><div class="spinner"></div><span>Загрузка 3D…</span></div>
 
 <div id="fieldsModal" hidden>

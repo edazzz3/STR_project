@@ -18,15 +18,37 @@ const TXT_VB_STYLE = { kind: 'line', color: '#000000', width: 2 };
 const TXT_NB_STYLE = { kind: 'line', color: '#000000', width: 1 };
 const TXT_OTM_STYLE = { kind: 'points', color: '#808080', size: 1 };
 
-function styleFor(g) {
-  if (g.id === 'txt') {
-    if (g.code === 'vb')  return TXT_VB_STYLE;
-    if (g.code === 'nb')  return TXT_NB_STYLE;
-    if (g.code === 'otm') return TXT_OTM_STYLE;
-    return g.kind === 'line' ? TXT_LINE_STYLE : TXT_POINTS_STYLE;
+/** Адаптирует цвет под тёмную тему: тёмные цвета → светлые. */
+function adaptColor(c, theme) {
+  if (theme !== 'dark') return c;
+  if (!c) return c;
+  const hex = c.startsWith('#') ? c : '#' + c;
+  if (hex.length === 7) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    if (lum < 0.35) return '#e2e8f0';
   }
-  if (STYLES[g.id]) return STYLES[g.id];
-  return DEFAULT_STYLE;
+  return c;
+}
+
+function styleFor(g, theme) {
+  let st;
+  if (g.id === 'txt') {
+    if (g.code === 'vb') st = TXT_VB_STYLE;
+    else if (g.code === 'nb') st = TXT_NB_STYLE;
+    else if (g.code === 'otm') st = TXT_OTM_STYLE;
+    else st = g.kind === 'line' ? TXT_LINE_STYLE : TXT_POINTS_STYLE;
+  } else if (STYLES[g.id]) {
+    st = STYLES[g.id];
+  } else {
+    st = DEFAULT_STYLE;
+  }
+  if (theme === 'dark' && st.color) {
+    return { ...st, color: adaptColor(st.color, theme) };
+  }
+  return st;
 }
 
 function makeCircleTexture() {
@@ -43,7 +65,7 @@ function makeCircleTexture() {
   return tex;
 }
 
-export function createRender3d({ canvas, onInfo }) {
+export function createRender3d({ canvas, onInfo, getTheme }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   const scene = new THREE.Scene();
@@ -70,6 +92,8 @@ export function createRender3d({ canvas, onInfo }) {
   scene.add(measureGroup);
   let active = false;
   const circleTex = makeCircleTexture();
+
+  const themeNow = () => (getTheme ? getTheme() : 'light');
 
   // Материалы fat-lines (кэш по цвету+толщине)
   const lineMaterials = new Map();
@@ -272,6 +296,7 @@ export function createRender3d({ canvas, onInfo }) {
     pivot.reset();
     clearMeasureVisual();
     camera.up.set(0, 1, 0);
+    scene.background = new THREE.Color(themeNow() === 'dark' ? 0x0f172a : 0xf4f6f8);
 
     const sets = layers.filter(L => (L.kind === 'str' || L.kind === 'txt') && L.visible);
     const all = sets.flatMap(L => L.pts);
@@ -282,9 +307,11 @@ export function createRender3d({ canvas, onInfo }) {
     const cx = sx / all.length, cy = sy / all.length, cz = sz / all.length;
     const v = p => new THREE.Vector3(p.x - cx, p.z - cz, -(p.y - cy));
 
+    const theme = themeNow();
+
     for (const { pts, groups } of sets) {
       for (const g of groups) {
-        const st = styleFor(g);
+        const st = styleFor(g, theme);
 
         const isDrillGroup = g.idx.some(i => pts[i].drill);
         const drawIdx = (st.kind === 'points' && isDrillGroup)
@@ -307,7 +334,6 @@ export function createRender3d({ canvas, onInfo }) {
           }
         }
 
-        // Стволы скважин (drill) — тонкие линии
         for (const i of g.idx) {
           const p = pts[i];
           if (!p.drill) continue;
@@ -365,6 +391,11 @@ export function createRender3d({ canvas, onInfo }) {
     cancelPivot: pivot.cancel,
     isPivotPicking: pivot.isPicking,
     resetPivot: pivot.reset,
+    setTheme() {
+      scene.background = new THREE.Color(themeNow() === 'dark' ? 0x0f172a : 0xf4f6f8);
+      for (const m of lineMaterials.values()) m.dispose();
+      lineMaterials.clear();
+    },
     setEnabled(v) {
       active = v;
       canvas.style.display = v ? 'block' : 'none';

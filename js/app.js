@@ -18,19 +18,42 @@ const setInfo = t => { infoEl.textContent = t; };
 let r3 = null;
 let measureMode = false;
 
+// ── Тема: по умолчанию всегда светлая ──
+function applyTheme(theme) {
+  state.theme = theme;
+  document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : '');
+  const meta = document.querySelector('meta[name=theme-color]');
+  if (meta) meta.setAttribute('content', theme === 'dark' ? '#0f172a' : '#ffffff');
+  if (r2 && r2.setTheme) r2.setTheme();
+  if (r3) {
+    if (r3.setTheme) r3.setTheme();
+    if (state.mode3d && r3.build) r3.build(state.layers);
+  }
+}
+
+// Всегда светлая при загрузке
+state.theme = 'light';
+document.documentElement.setAttribute('data-theme', '');
+
 function syncSidebarBounds() {
   const sb = $('sidebar');
-  if (!sb) return;
-  const top = $('top').getBoundingClientRect().bottom;
-  const bottom = window.innerHeight - $('info').getBoundingClientRect().top;
-  sb.style.top = top + 'px';
-  sb.style.bottom = bottom + 'px';
+  const topEl = $('top');
+  const infoEl2 = $('info');
+  if (!sb || !topEl || !infoEl2) return;
+
+  const topH = topEl.getBoundingClientRect().height || 0;
+  const infoH = infoEl2.getBoundingClientRect().height || 0;
+
+  sb.style.top = topH + 'px';
+  sb.style.bottom = infoH + 'px';
+  sb.style.height = '';
 }
 
 const r2 = createRender2d({
   canvas: $('c'),
   getLayers: () => state.layers,
   getLabelConfig: () => state.labelConfig,
+  getTheme: () => state.theme,
   onInfo: setInfo,
   onTap: (x, y) => georef.active && georef.tap(x, y),
 });
@@ -144,7 +167,11 @@ $('georef').addEventListener('click', () => georef.active ? georef.stop('При�
 async function get3d() {
   if (!r3) {
     const { createRender3d } = await import('./renderers/render3d.js');
-    r3 = createRender3d({ canvas: $('c3'), onInfo: setInfo });
+    r3 = createRender3d({
+      canvas: $('c3'),
+      onInfo: setInfo,
+      getTheme: () => state.theme,
+    });
   }
   return r3;
 }
@@ -224,6 +251,11 @@ async function applyView(kind) {
 }
 $('viewTop').addEventListener('click', () => applyView('top'));
 $('viewEast').addEventListener('click', () => applyView('east'));
+
+// ---------- ТЕМА ----------
+$('themeBtn').addEventListener('click', () => {
+  applyTheme(state.theme === 'dark' ? 'light' : 'dark');
+});
 
 // ---------- 2D / 3D ----------
 $('mode3d').addEventListener('change', async e => {
