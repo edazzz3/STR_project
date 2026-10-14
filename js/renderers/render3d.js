@@ -260,10 +260,16 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
     if (!measureP1) {
       measureP1 = p; measureP2 = null;
       onInfo && onInfo('Тапните вторую точку');
-    } else if (!measureP2) {
+      } else if (!measureP2) {
       measureP2 = p;
-      const dist = measureP1.distanceTo(measureP2);
-      onInfo && onInfo(`Пространственное расстояние: ${dist.toFixed(3)} м`);
+      const dx = measureP2.x - measureP1.x;
+      const dy = measureP2.y - measureP1.y;
+      const dz = measureP2.z - measureP1.z;
+      // В 3D системе Three.js: X = восток, Y = вверх (это Z съёмки), Z = -север.
+      // Плановая проекция — по X и Z (восток и север), без учёта высоты.
+      const planar = Math.hypot(dx, dz);
+      const spatial = Math.hypot(dx, dy, dz);
+      onInfo && onInfo(`В плане: ${planar.toFixed(3)} м · Наклонное: ${spatial.toFixed(3)} м`);
     } else {
       measureP1 = p; measureP2 = null;
       onInfo && onInfo('Тапните вторую точку');

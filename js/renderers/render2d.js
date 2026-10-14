@@ -463,10 +463,14 @@ export function createRender2d({
       measureP1 = { x: p.x, y: p.y, z: p.z };
       measureP2 = null;
       onInfo('Тапните вторую точку');
-    } else if (!measureP2) {
+      } else if (!measureP2) {
       measureP2 = { x: p.x, y: p.y, z: p.z };
-      const dist = Math.hypot(measureP2.x - measureP1.x, measureP2.y - measureP1.y);
-      onInfo(`Расстояние в плане: ${fmtDist(dist)}`);
+      const dx = measureP2.x - measureP1.x;
+      const dy = measureP2.y - measureP1.y;
+      const dz = measureP2.z - measureP1.z;
+      const planar = Math.hypot(dx, dy);
+      const spatial = Math.hypot(dx, dy, dz);
+      onInfo(`В плане: ${fmtDist(planar)} · Наклонное: ${fmtDist(spatial)}`);
     } else {
       measureP1 = { x: p.x, y: p.y, z: p.z };
       measureP2 = null;
