@@ -633,8 +633,8 @@ button[hidden] { display: none !important; }
   }
 
   button, .btn, label.chk-icon, label.switch {
-    min-height: 30px;
-    font-size: 11px;
+    min-height: 25px;
+    font-size: 12px;
   }
   button, .btn { padding: 0 8px; }
 
@@ -666,8 +666,8 @@ button[hidden] { display: none !important; }
   label.switch input:checked + .track::before { left: 6px; }
 
   /* Сайдбар — узкий */
-  #sidebar { width: 20px; }
-  #sidebar.expanded { width: 120px; }
+  #sidebar { width: 15px; }
+  #sidebar.expanded { width: 100px; }
 
   .sidebar-icon-btn { min-height: 34px; }
   .sidebar-icon-btn svg { width: 16px; height: 16px; }
