@@ -2,6 +2,7 @@
 // Шаг 1: выбор стрингов. Шаг 2: выбор до 2 полей (Z + D1..D26) + округление.
 import { state } from '../state.js';
 import { STR_FIELDS } from '../parsers/strParser.js';
+import { TXT_FIELDS } from '../parsers/txtParser.js';
 
 export function createFieldsModal({ onApply }) {
   const modal = document.getElementById('fieldsModal');
@@ -31,7 +32,6 @@ export function createFieldsModal({ onApply }) {
     });
   }
 
-  // Возвращает массив ключей: 'z' (если есть координата) + 'dN' (только заполненные)
   function collectFieldsFor(ids) {
     const dNums = new Set();
     let hasZ = false;
@@ -59,7 +59,9 @@ export function createFieldsModal({ onApply }) {
   function labelFor(key) {
     if (key === 'z') return 'Z — Отметка';
     const num = +key.slice(1);
-    return STR_FIELDS[num] ? `D${num} — ${STR_FIELDS[num]}` : `D${num}`;
+    const onlyTxt = selectedStreams.size === 1 && selectedStreams.has('txt');
+    const dict = onlyTxt ? TXT_FIELDS : STR_FIELDS;
+    return dict[num] ? `D${num} — ${dict[num]}` : `D${num}`;
   }
 
   function showStep(n) {
@@ -104,7 +106,9 @@ export function createFieldsModal({ onApply }) {
         else selectedStreams.delete(id);
         renderStep1();
       });
-      const label = typeof id === 'number' ? `Стринг ${id}` : `Стринг «${id}»`;
+      const label = typeof id === 'number'
+        ? `Стринг ${id}`
+        : (id === 'txt' ? 'Точки (TXT)' : `Стринг «${id}»`);
       row.append(cb, document.createTextNode(' ' + label));
       streamListEl.appendChild(row);
     }

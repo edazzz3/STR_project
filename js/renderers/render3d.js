@@ -1,6 +1,9 @@
 // 3D-режим на Three.js.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { STYLES, DEFAULT_STYLE } from '../parsers/strParser.js';
 import { createPivot } from './pivot.js';
 
@@ -8,6 +11,23 @@ const MS_COLOR = 0xff8800;
 const PICK_RADIUS_PX = 20;
 const TAP_MAX_MOVE_PX = 6;
 const TAP_MAX_MS = 400;
+
+const TXT_POINTS_STYLE = { kind: 'points', color: '#d02020', size: 3 };
+const TXT_LINE_STYLE = { kind: 'line', color: '#d02020', width: 2 };
+const TXT_VB_STYLE = { kind: 'line', color: '#000000', width: 2 };
+const TXT_NB_STYLE = { kind: 'line', color: '#000000', width: 1 };
+const TXT_OTM_STYLE = { kind: 'points', color: '#808080', size: 1 };
+
+function styleFor(g) {
+  if (g.id === 'txt') {
+    if (g.code === 'vb')  return TXT_VB_STYLE;
+    if (g.code === 'nb')  return TXT_NB_STYLE;
+    if (g.code === 'otm') return TXT_OTM_STYLE;
+    return g.kind === 'line' ? TXT_LINE_STYLE : TXT_POINTS_STYLE;
+  }
+  if (STYLES[g.id]) return STYLES[g.id];
+  return DEFAULT_STYLE;
+}
 
 function makeCircleTexture() {
   const s = 64;
@@ -48,12 +68,38 @@ export function createRender3d({ canvas, onInfo }) {
   let active = false;
   const circleTex = makeCircleTexture();
 
+  // Материалы fat-lines (кэш по цвету+толщине)
+  const lineMaterials = new Map();
+  function getLineMaterial(color, width) {
+    const key = color + '|' + width;
+    let mat = lineMaterials.get(key);
+    if (!mat) {
+      mat = new LineMaterial({
+        color,
+        linewidth: width,
+        worldUnits: false,
+        resolution: new THREE.Vector2(innerWidth, innerHeight),
+      });
+      lineMaterials.set(key, mat);
+    }
+    return mat;
+  }
+
+  function createFatLine(points3, color, width) {
+    const positions = [];
+    for (const p of points3) positions.push(p.x, p.y, p.z);
+    const geom = new LineGeometry();
+    geom.setPositions(positions);
+    const line = new Line2(geom, getLineMaterial(color, width));
+    line.computeLineDistances();
+    return line;
+  }
+
   const pivot = createPivot({
     canvas, camera, controls, content,
     getPlaneY: () => 0,
   });
 
-  // Панорама зажатым колесом
   let panning = false, lastX = 0, lastY = 0;
   canvas.addEventListener('pointerdown', e => {
     if (e.button === 1) { panning = true; lastX = e.clientX; lastY = e.clientY; e.preventDefault(); }
@@ -75,57 +121,47 @@ export function createRender3d({ canvas, onInfo }) {
   canvas.addEventListener('pointerleave', endPan);
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-  // Измерение
   let measureActive = false;
   let measureP1 = null;
   let measureP2 = null;
-
-  // Отслеживание тапа в режиме измерения
   let md = { x: 0, y: 0, t: 0, moved: 0, active: false, id: null };
 
   canvas.addEventListener('pointerdown', e => {
     if (!measureActive || e.button !== 0) return;
-    md.x = e.clientX;
-    md.y = e.clientY;
-    md.t = Date.now();
-    md.moved = 0;
-    md.active = true;
-    md.id = e.pointerId;
+    md.x = e.clientX; md.y = e.clientY;
+    md.t = Date.now(); md.moved = 0;
+    md.active = true; md.id = e.pointerId;
   });
 
   canvas.addEventListener('pointermove', e => {
     if (!md.active || e.pointerId !== md.id) return;
     md.moved += Math.abs(e.clientX - md.x) + Math.abs(e.clientY - md.y);
-    md.x = e.clientX;
-    md.y = e.clientY;
+    md.x = e.clientX; md.y = e.clientY;
   });
 
   canvas.addEventListener('pointerup', e => {
     if (!md.active || e.pointerId !== md.id) return;
     const dt = Date.now() - md.t;
     const isTap = md.moved < TAP_MAX_MOVE_PX && dt < TAP_MAX_MS;
-    md.active = false;
-    md.id = null;
+    md.active = false; md.id = null;
     if (isTap) handleMeasureTap(e.clientX, e.clientY);
   });
 
   canvas.addEventListener('pointercancel', () => {
-    md.active = false;
-    md.id = null;
+    md.active = false; md.id = null;
   });
 
   function clearMeasureVisual() {
     for (const o of [...measureGroup.children]) {
       measureGroup.remove(o);
       o.geometry && o.geometry.dispose();
-      o.material && o.material.dispose();
+      o.material && o.material.dispose && o.material.dispose();
     }
   }
 
   function rebuildMeasureVisual() {
     clearMeasureVisual();
-    if (!measureActive) return;
-    if (!measureP1) return;
+    if (!measureActive || !measureP1) return;
 
     const mGeom = new THREE.BufferGeometry().setFromPoints([measureP1]);
     const mMat = new THREE.PointsMaterial({
@@ -137,9 +173,8 @@ export function createRender3d({ canvas, onInfo }) {
 
     if (!measureP2) return;
 
-    const lineGeom = new THREE.BufferGeometry().setFromPoints([measureP1, measureP2]);
-    const lineMat = new THREE.LineBasicMaterial({ color: MS_COLOR, depthTest: false });
-    measureGroup.add(new THREE.Line(lineGeom, lineMat));
+    const line = createFatLine([measureP1, measureP2], MS_COLOR, 2);
+    measureGroup.add(line);
 
     const mGeom2 = new THREE.BufferGeometry().setFromPoints([measureP2]);
     measureGroup.add(new THREE.Points(mGeom2, mMat));
@@ -150,20 +185,31 @@ export function createRender3d({ canvas, onInfo }) {
     let best = null, bestD = PICK_RADIUS_PX;
 
     const v = new THREE.Vector3();
+
+    function processWorldPoint(worldPt) {
+      const ndc = worldPt.clone().project(camera);
+      if (ndc.z < -1 || ndc.z > 1) return;
+      const sx = (ndc.x * 0.5 + 0.5) * rect.width + rect.left;
+      const sy = (-ndc.y * 0.5 + 0.5) * rect.height + rect.top;
+      const d = Math.hypot(sx - clientX, sy - clientY);
+      if (d < bestD) { bestD = d; best = worldPt.clone(); }
+    }
+
     content.traverse(o => {
-      if (!o.geometry || !o.geometry.attributes || !o.geometry.attributes.position) return;
-      if (!o.isPoints && !o.isLine) return;
-      const attr = o.geometry.attributes.position;
-      for (let i = 0; i < attr.count; i++) {
-        v.fromBufferAttribute(attr, i);
-        const ndc = v.clone().project(camera);
-        if (ndc.z < -1 || ndc.z > 1) continue;
-        const sx = (ndc.x * 0.5 + 0.5) * rect.width + rect.left;
-        const sy = (-ndc.y * 0.5 + 0.5) * rect.height + rect.top;
-        const d = Math.hypot(sx - clientX, sy - clientY);
-        if (d < bestD) {
-          bestD = d;
-          best = v.clone();
+      if (o.isPoints && o.geometry && o.geometry.attributes.position) {
+        const attr = o.geometry.attributes.position;
+        for (let i = 0; i < attr.count; i++) {
+          v.fromBufferAttribute(attr, i);
+          processWorldPoint(v);
+        }
+      } else if (o.isLine2 && o.geometry) {
+        const start = o.geometry.getAttribute('instanceStart');
+        const end = o.geometry.getAttribute('instanceEnd');
+        if (start && end) {
+          for (let i = 0; i < start.count; i++) {
+            processWorldPoint(new THREE.Vector3(start.getX(i), start.getY(i), start.getZ(i)));
+            processWorldPoint(new THREE.Vector3(end.getX(i), end.getY(i), end.getZ(i)));
+          }
         }
       }
     });
@@ -176,22 +222,25 @@ export function createRender3d({ canvas, onInfo }) {
       onInfo && onInfo('Рядом нет точки — тапните по точке данных');
       return true;
     }
-
     if (!measureP1) {
-      measureP1 = p;
-      measureP2 = null;
+      measureP1 = p; measureP2 = null;
       onInfo && onInfo('Тапните вторую точку');
     } else if (!measureP2) {
       measureP2 = p;
       const dist = measureP1.distanceTo(measureP2);
       onInfo && onInfo(`Пространственное расстояние: ${dist.toFixed(3)} м`);
     } else {
-      measureP1 = p;
-      measureP2 = null;
+      measureP1 = p; measureP2 = null;
       onInfo && onInfo('Тапните вторую точку');
     }
     rebuildMeasureVisual();
     return true;
+  }
+
+  function updateResolutions() {
+    for (const m of lineMaterials.values()) {
+      m.resolution.set(innerWidth, innerHeight);
+    }
   }
 
   function resize() {
@@ -200,6 +249,7 @@ export function createRender3d({ canvas, onInfo }) {
     canvas.style.height = innerHeight + 'px';
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
+    updateResolutions();
   }
   addEventListener('resize', resize);
 
@@ -207,7 +257,10 @@ export function createRender3d({ canvas, onInfo }) {
     for (const o of [...content.children]) {
       content.remove(o);
       o.geometry && o.geometry.dispose();
-      o.material && o.material.dispose();
+      if (o.material) {
+        if (Array.isArray(o.material)) o.material.forEach(m => m.dispose && m.dispose());
+        else o.material.dispose && o.material.dispose();
+      }
     }
   }
 
@@ -228,7 +281,7 @@ export function createRender3d({ canvas, onInfo }) {
 
     for (const { pts, groups } of sets) {
       for (const g of groups) {
-        const st = STYLES[g.id] || (g.id === 'txt' ? { kind: 'points', color: '#d02020' } : DEFAULT_STYLE);
+        const st = styleFor(g);
 
         const isDrillGroup = g.idx.some(i => pts[i].drill);
         const drawIdx = (st.kind === 'points' && isDrillGroup)
@@ -236,19 +289,27 @@ export function createRender3d({ canvas, onInfo }) {
           : g.idx;
         if (!drawIdx.length) continue;
 
-        const geom = new THREE.BufferGeometry().setFromPoints(drawIdx.map(i => v(pts[i])));
-        content.add(st.kind === 'points'
-          ? new THREE.Points(geom, new THREE.PointsMaterial({
-              color: st.color, size: 6, sizeAttenuation: false,
-              map: circleTex, transparent: true, alphaTest: 0.5,
-            }))
-          : new THREE.Line(geom, new THREE.LineBasicMaterial({ color: st.color })));
+        if (st.kind === 'points') {
+          const points = drawIdx.map(i => v(pts[i]));
+          const geom = new THREE.BufferGeometry().setFromPoints(points);
+          const pointSize = Math.max(3, (st.size || 3) * 2);
+          content.add(new THREE.Points(geom, new THREE.PointsMaterial({
+            color: st.color, size: pointSize, sizeAttenuation: false,
+            map: circleTex, transparent: true, alphaTest: 0.5,
+          })));
+        } else {
+          const points = drawIdx.map(i => v(pts[i]));
+          if (points.length >= 2) {
+            content.add(createFatLine(points, st.color, st.width || 1));
+          }
+        }
 
+        // Стволы скважин (drill) — тонкие линии
         for (const i of g.idx) {
           const p = pts[i];
           if (!p.drill) continue;
-          const stemGeom = new THREE.BufferGeometry().setFromPoints([v(p), v(p.drill.end)]);
-          content.add(new THREE.Line(stemGeom, new THREE.LineBasicMaterial({ color: st.color })));
+          const stem = [v(p), v(p.drill.end)];
+          content.add(createFatLine(stem, st.color, 1));
         }
       }
     }
@@ -260,6 +321,7 @@ export function createRender3d({ canvas, onInfo }) {
     camera.near = size / 1000; camera.far = size * 100;
     camera.updateProjectionMatrix();
     controls.update();
+    updateResolutions();
   }
 
   function setView(kind) {
@@ -273,20 +335,15 @@ export function createRender3d({ canvas, onInfo }) {
     } else if (kind === 'east') {
       camera.position.set(target.x + dist, target.y, target.z);
     }
-
     camera.lookAt(target);
     controls.update();
   }
 
   function setMeasureMode(v) {
     measureActive = !!v;
-    measureP1 = null;
-    measureP2 = null;
-    md.active = false;
-    md.id = null;
-    if (measureActive) {
-      onInfo && onInfo('Режим измерения: тапните точку');
-    }
+    measureP1 = null; measureP2 = null;
+    md.active = false; md.id = null;
+    if (measureActive) onInfo && onInfo('Режим измерения: тапните точку');
     rebuildMeasureVisual();
     return measureActive;
   }

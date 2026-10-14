@@ -1,11 +1,16 @@
 // 2D-рендер на canvas: слои PDF (снизу), затем STR и TXT (сверху). Камера, pick, измерения.
 // Жесты и зум — в ./input.js
 import { STYLES, DEFAULT_STYLE } from '../parsers/strParser.js';
+import { TXT_FIELDS } from '../parsers/txtParser.js';
 import { worldToPdf } from '../parsers/pdfOverlay.js';
 import { createInput } from './input.js';
 
 const FONT = '"Times New Roman", Times, serif';
 const TXT_STYLE = { kind: 'points', color: '#d02020', size: 3 };
+const TXT_LINE_STYLE = { kind: 'line', color: '#d02020', width: 2 };
+const TXT_VB_STYLE = { kind: 'line', color: '#000000', width: 2 };
+const TXT_NB_STYLE = { kind: 'line', color: '#000000', width: 1 };
+const TXT_OTM_STYLE = { kind: 'points', color: '#808080', size: 1 };
 const HL_COLOR = 'rgba(0, 120, 255, 0.7)';
 const HL_EXTRA = 4;
 const MS_COLOR = '#ff8800';
@@ -24,6 +29,17 @@ const fmtRound1 = v => {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 };
 const fmtDist = d => d.toFixed(3) + ' м';
+
+function styleFor(g) {
+  if (g.id === 'txt') {
+    if (g.code === 'vb')  return TXT_VB_STYLE;
+    if (g.code === 'nb')  return TXT_NB_STYLE;
+    if (g.code === 'otm') return TXT_OTM_STYLE;
+    return g.kind === 'line' ? TXT_LINE_STYLE : TXT_STYLE;
+  }
+  if (STYLES[g.id]) return STYLES[g.id];
+  return DEFAULT_STYLE;
+}
 
 function fieldValue(p, key, round) {
   if (!key) return '';
@@ -47,20 +63,24 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
   let enabled = true;
   let highlighted = null;
 
-  // Измерение
   let measureActive = false;
-  let measureP1 = null;   // { x, y, z }
+  let measureP1 = null;
   let measureP2 = null;
 
   const allLayers = () => getLayers() || [];
   const pdfLayers = () => allLayers().filter(L => L.kind === 'pdf' && L.visible && L.affine);
   const dataLayers = () => allLayers().filter(L => (L.kind === 'str' || L.kind === 'txt') && L.visible);
 
-  const labelsFor = (p) => {
+  const labelsFor = (p, g, hasLine) => {
     const cfg = (getLabelConfig() || {})[p.id];
     if (cfg) return { fields: cfg.fields || [], round: !!cfg.round };
     const st = STYLES[p.id];
     if (st && st.labelField) return { fields: [st.labelField], round: false };
+    if (p.id === 'txt') {
+      if (g && g.code) return { fields: [], round: false };
+      if (hasLine) return { fields: [], round: false };
+      return { fields: ['d1'], round: false };
+    }
     return { fields: [], round: false };
   };
 
@@ -138,13 +158,15 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
   }
 
   function drawLayer({ pts, groups }) {
+    const hasLine = groups.some(g => styleFor(g).kind === 'line');
+
     // Pass 0: линии, стволы скважин
     for (const g of groups) {
-      const st = STYLES[g.id] || (g.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
+      const st = styleFor(g);
 
       if (st.kind === 'line') {
         ctx.strokeStyle = st.color;
-        ctx.lineWidth = st.width;
+        ctx.lineWidth = st.width || 2;
         ctx.beginPath();
         g.idx.forEach((i, k) => {
           const [sx, sy] = toScreen(pts[i]);
@@ -177,7 +199,7 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
 
     // Pass 1: точки + подписи полей
     for (const g of groups) {
-      const st = STYLES[g.id] || (g.id === 'txt' ? TXT_STYLE : DEFAULT_STYLE);
+      const st = styleFor(g);
       if (st.kind !== 'points') continue;
 
       const isDrillGroup = g.idx.some(i => pts[i].drill);
@@ -192,7 +214,7 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
         ctx.arc(sx, sy, st.size, 0, Math.PI * 2);
         ctx.fill();
 
-        const { fields, round } = labelsFor(p);
+        const { fields, round } = labelsFor(p, g, hasLine);
         if (fields.length) {
           ctx.font = `12px ${FONT}`;
           ctx.textAlign = 'left';
@@ -231,7 +253,6 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
     }
   }
 
-  // ── Отрисовка измерения (линия, стрелки, подпись) ──
   function drawArrowAt(tipSx, tipSy, dirRad) {
     const bx = tipSx - Math.cos(dirRad) * MS_ARROW_LEN;
     const by = tipSy - Math.sin(dirRad) * MS_ARROW_LEN;
@@ -250,7 +271,6 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
     if (!measureP1) return;
 
     const [sx1, sy1] = toScreen(measureP1);
-    // Маркер первой точки — маленькое кольцо
     ctx.strokeStyle = MS_COLOR;
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -267,7 +287,6 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
 
     const dirRad = Math.atan2(dy, dx);
 
-    // Линия — пунктир
     ctx.save();
     ctx.setLineDash([6, 4]);
     ctx.strokeStyle = MS_COLOR;
@@ -278,17 +297,14 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
     ctx.stroke();
     ctx.restore();
 
-    // Стрелки — наружу от концов
     ctx.fillStyle = MS_COLOR;
     drawArrowAt(sx1, sy1, dirRad + Math.PI);
     drawArrowAt(sx2, sy2, dirRad);
 
-    // Маркер второй точки
     ctx.beginPath();
     ctx.arc(sx2, sy2, 5, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Подпись по середине, чуть выше линии
     const dist = Math.hypot(measureP2.x - measureP1.x, measureP2.y - measureP1.y);
     const midX = (sx1 + sx2) / 2;
     const midY = (sy1 + sy2) / 2 - 10;
@@ -346,6 +362,15 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
       onInfo(`Стринг ${p.id} · № ${num} · Азм ${d.az}° · Накл ${d.dip}° · Глуб ${d.depth} м (${kind}) · ${base}`);
       return;
     }
+    if (p.id === 'txt') {
+      const name = p.d[0] || '';
+      const desc = p.d[1] || '';
+      const parts = [`Точка ${name || '—'}`];
+      if (desc) parts.push(desc);
+      parts.push(base);
+      onInfo(parts.join(' · '));
+      return;
+    }
     const desc = p.d.map((v, i) => v ? `D${i + 1}=${v}` : '').filter(Boolean).join(' ');
     onInfo(`Стринг ${p.id} · ${base}` + (desc ? ` · ${desc}` : ''));
   }
@@ -375,7 +400,6 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, onInfo, 
       const dist = Math.hypot(measureP2.x - measureP1.x, measureP2.y - measureP1.y);
       onInfo(`Расстояние в плане: ${fmtDist(dist)}`);
     } else {
-      // Третий тап — новое измерение
       measureP1 = { x: p.x, y: p.y, z: p.z };
       measureP2 = null;
       onInfo('Тапните вторую точку');

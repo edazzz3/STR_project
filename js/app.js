@@ -12,6 +12,7 @@ import { state } from './state.js';
 const $ = id => document.getElementById(id);
 const infoEl = $('info');
 const swapEl = $('swap');
+const drawLineEl = $('drawLine');
 const setInfo = t => { infoEl.textContent = t; };
 
 let r3 = null;
@@ -172,7 +173,10 @@ const handleImport = createImportHandler({
 });
 
 $('fileInput').addEventListener('change', async e => {
-  await handleImport(e.target.files, swapEl.checked);
+  await handleImport(e.target.files, {
+    swap: swapEl.checked,
+    drawLine: drawLineEl.checked,
+  });
   e.target.value = '';
 });
 

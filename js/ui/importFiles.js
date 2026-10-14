@@ -33,9 +33,11 @@ export function createImportHandler({
   recomputePdfAffine,
   reset3dPivot,
 }) {
-  async function handleFiles(fileList, swap) {
+  async function handleFiles(fileList, opts = {}) {
     const files = [...fileList];
     if (!files.length) return;
+    const swap = !!opts.swap;
+    const drawLine = !!opts.drawLine;
     let lastErr = '';
 
     for (const f of files) {
@@ -87,7 +89,7 @@ export function createImportHandler({
           lastErr = `«${f.name}»: формат не поддерживается`;
         } else {
           const text = await readText(f);
-          const parsed = parseTxt(text, swap);
+          const parsed = parseTxt(text, swap, drawLine);
           state.layers.push({
             id: newLayerId(), kind: 'txt', name: f.name,
             visible: true, locked: false,
