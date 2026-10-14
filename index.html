@@ -21,10 +21,19 @@
 <body>
 
 <div id="sidebar" class="collapsed">
-  <button id="fieldsBtn" class="sidebar-icon-btn" title="Отображение полей у точек">
+  <button id="streamsBtn" class="sidebar-icon-btn" title="Видимость стрингов">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
       <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/>
       <circle cx="12" cy="12" r="3"/>
+    </svg>
+    <span class="sidebar-icon-label">Стринги</span>
+  </button>
+
+  <button id="fieldsBtn" class="sidebar-icon-btn" title="Отображение полей у точек">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="8" cy="17" r="2.2" fill="currentColor" stroke="none"/>
+      <path d="M13 10 L15.5 4 L18 10"/>
+      <path d="M13.9 8 L17.1 8"/>
     </svg>
     <span class="sidebar-icon-label">Поля</span>
   </button>
@@ -155,7 +164,7 @@
   <div class="modal-backdrop"></div>
   <div class="modal-body">
     <div class="modal-step step-1">
-      <div class="modal-title">Выберите стринги</div>
+      <div class="modal-title">Отображение полей у точек</div>
       <div class="modal-list" id="fieldsStreamList"></div>
       <div class="modal-actions">
         <div class="modal-actions-right">
@@ -173,6 +182,20 @@
           <button id="fieldsReset">Сброс</button>
           <button id="fieldsApply" class="primary">Применить</button>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="streamsModal" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-body">
+    <div class="modal-title">Отключение видимости стрингов</div>
+    <div class="modal-list" id="streamsList"></div>
+    <div class="modal-actions">
+      <button id="streamsShowAll">Показать все</button>
+      <div class="modal-actions-right">
+        <button id="streamsClose" class="primary">Готово</button>
       </div>
     </div>
   </div>

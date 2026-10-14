@@ -418,11 +418,11 @@ label.switch input:checked + .track::after {
 .layer-row .layer-del { color: #f87171; }
 
 /* ── Модалки ─────────────────────────────────────── */
-#fieldsModal, #georefModal, #pdfPagesModal, #surveyModal {
+#fieldsModal, #streamsModal, #georefModal, #pdfPagesModal, #surveyModal {
   position: fixed; inset: 0; z-index: 20;
   display: flex; align-items: center; justify-content: center;
 }
-#fieldsModal[hidden], #georefModal[hidden], #pdfPagesModal[hidden], #surveyModal[hidden] { display: none; }
+#fieldsModal[hidden], #streamsModal[hidden], #georefModal[hidden], #pdfPagesModal[hidden], #surveyModal[hidden] { display: none; }
 
 .modal-backdrop {
   position: absolute; inset: 0;

@@ -65,7 +65,7 @@ function makeCircleTexture() {
   return tex;
 }
 
-export function createRender3d({ canvas, onInfo, getTheme }) {
+export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   const scene = new THREE.Scene();
@@ -94,6 +94,14 @@ export function createRender3d({ canvas, onInfo, getTheme }) {
   const circleTex = makeCircleTexture();
 
   const themeNow = () => (getTheme ? getTheme() : 'light');
+  const hiddenNow = () => (getHiddenStreams ? getHiddenStreams() : null);
+
+  function isStreamHidden(g, L) {
+    if (L.locked) return false;
+    const hidden = hiddenNow();
+    if (!hidden || !hidden.size) return false;
+    return hidden.has(String(g.id));
+  }
 
   // Материалы fat-lines (кэш по цвету+толщине)
   const lineMaterials = new Map();
@@ -309,8 +317,11 @@ export function createRender3d({ canvas, onInfo, getTheme }) {
 
     const theme = themeNow();
 
-    for (const { pts, groups } of sets) {
+    for (const L of sets) {
+      const { pts, groups } = L;
       for (const g of groups) {
+        if (isStreamHidden(g, L)) continue;
+
         const st = styleFor(g, theme);
 
         const isDrillGroup = g.idx.some(i => pts[i].drill);

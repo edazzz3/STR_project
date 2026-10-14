@@ -64,6 +64,11 @@ export function createFieldsModal({ onApply }) {
     return dict[num] ? `D${num} — ${dict[num]}` : `D${num}`;
   }
 
+  function streamLabel(id) {
+    if (id === 'txt') return 'TXT';
+    return String(id);
+  }
+
   function showStep(n) {
     step1.hidden = n !== 1;
     step2.hidden = n !== 2;
@@ -106,10 +111,7 @@ export function createFieldsModal({ onApply }) {
         else selectedStreams.delete(id);
         renderStep1();
       });
-      const label = typeof id === 'number'
-        ? `Стринг ${id}`
-        : (id === 'txt' ? 'Точки (TXT)' : `Стринг «${id}»`);
-      row.append(cb, document.createTextNode(' ' + label));
+      row.append(cb, document.createTextNode(' ' + streamLabel(id)));
       streamListEl.appendChild(row);
     }
   }

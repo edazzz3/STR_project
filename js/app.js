@@ -3,6 +3,7 @@ import { defaultAffine } from './parsers/pdfOverlay.js';
 import { createRender2d } from './renderers/render2d.js';
 import { createLayersPanel } from './ui/layers.js';
 import { createFieldsModal } from './ui/fields.js';
+import { createStreamsModal } from './ui/streams.js';
 import { createGeorefModal } from './ui/georef.js';
 import { createPdfPagesModal } from './ui/pdfPages.js';
 import { createImportHandler } from './ui/importFiles.js';
@@ -32,7 +33,7 @@ function applyTheme(theme) {
   }
 }
 
-// Всегда светлая при загрузке (без вызова applyTheme — r2/r3 ещё не созданы)
+// Всегда светлая при загрузке
 document.documentElement.setAttribute('data-theme', '');
 
 function syncSidebarBounds() {
@@ -51,6 +52,7 @@ const r2 = createRender2d({
   canvas: $('c'),
   getLayers: () => state.layers,
   getLabelConfig: () => state.labelConfig,
+  getHiddenStreams: () => state.hiddenStreams,
   getTheme: () => state.theme,
   onInfo: setInfo,
   onTap: (x, y) => georef.active && georef.tap(x, y),
@@ -63,6 +65,10 @@ const layersPanel = createLayersPanel({
 
 const fieldsModal = createFieldsModal({
   onApply: () => { r2.draw(); },
+});
+
+const streamsModal = createStreamsModal({
+  onApply: () => { redraw(false); },
 });
 
 const pdfPagesModal = createPdfPagesModal();
@@ -169,6 +175,7 @@ async function get3d() {
       canvas: $('c3'),
       onInfo: setInfo,
       getTheme: () => state.theme,
+      getHiddenStreams: () => state.hiddenStreams,
     });
   }
   return r3;
@@ -206,6 +213,7 @@ $('fileInput').addEventListener('change', async e => {
 });
 
 $('fit').addEventListener('click', () => redraw(true));
+$('streamsBtn').addEventListener('click', () => streamsModal.open());
 $('fieldsBtn').addEventListener('click', () => fieldsModal.open());
 $('surveyBtn').addEventListener('click', () => surveyModal.open());
 

@@ -60,7 +60,15 @@ function fieldValue(p, key, round) {
   return '';
 }
 
-export function createRender2d({ canvas: cv, getLayers, getLabelConfig, getTheme, onInfo, onTap }) {
+export function createRender2d({
+  canvas: cv,
+  getLayers,
+  getLabelConfig,
+  getHiddenStreams,
+  getTheme,
+  onInfo,
+  onTap,
+}) {
   const ctx = cv.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const view = { s: 1, cx: 0, cy: 0, ox: 0, oy: 0 };
@@ -72,10 +80,31 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, getTheme
   let measureP2 = null;
 
   const themeNow = () => (getTheme ? getTheme() : 'light');
+  const hiddenNow = () => (getHiddenStreams ? getHiddenStreams() : null);
 
   const allLayers = () => getLayers() || [];
   const pdfLayers = () => allLayers().filter(L => L.kind === 'pdf' && L.visible && L.affine);
   const dataLayers = () => allLayers().filter(L => (L.kind === 'str' || L.kind === 'txt') && L.visible);
+
+  /** Скрыт ли стринг g в слое L? На заблокированных слоях — никогда. */
+  function isStreamHidden(g, L) {
+    if (L.locked) return false;
+    const hidden = hiddenNow();
+    if (!hidden || !hidden.size) return false;
+    return hidden.has(String(g.id));
+  }
+
+  /** Индексы скрытых точек слоя L (для pick / bounds). */
+  function hiddenPtIdx(L) {
+    const set = new Set();
+    if (L.locked) return set;
+    const hidden = hiddenNow();
+    if (!hidden || !hidden.size) return set;
+    for (const g of L.groups) {
+      if (hidden.has(String(g.id))) for (const i of g.idx) set.add(i);
+    }
+    return set;
+  }
 
   function styleFor(g) {
     let st;
@@ -119,9 +148,14 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, getTheme
 
   function bounds() {
     let mnx = Infinity, mxx = -Infinity, mny = Infinity, mxy = -Infinity;
-    for (const L of dataLayers()) for (const p of L.pts) {
-      mnx = Math.min(mnx, p.x); mxx = Math.max(mxx, p.x);
-      mny = Math.min(mny, p.y); mxy = Math.max(mxy, p.y);
+    for (const L of dataLayers()) {
+      const skip = hiddenPtIdx(L);
+      for (let i = 0; i < L.pts.length; i++) {
+        if (skip.has(i)) continue;
+        const p = L.pts[i];
+        mnx = Math.min(mnx, p.x); mxx = Math.max(mxx, p.x);
+        mny = Math.min(mny, p.y); mxy = Math.max(mxy, p.y);
+      }
     }
     if (mnx === Infinity) return null;
     return { minX: mnx, maxX: mxx, minY: mny, maxY: mxy };
@@ -182,11 +216,13 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, getTheme
     ctx.restore();
   }
 
-  function drawLayer({ pts, groups }) {
-    const hasLine = groups.some(g => styleFor(g).kind === 'line');
+  function drawLayer(L) {
+    const { pts, groups } = L;
+    const visibleGroups = groups.filter(g => !isStreamHidden(g, L));
+    const hasLine = visibleGroups.some(g => styleFor(g).kind === 'line');
 
     // Pass 0: линии, стволы скважин
-    for (const g of groups) {
+    for (const g of visibleGroups) {
       const st = styleFor(g);
 
       if (st.kind === 'line') {
@@ -223,7 +259,7 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, getTheme
     }
 
     // Pass 1: точки + подписи полей
-    for (const g of groups) {
+    for (const g of visibleGroups) {
       const st = styleFor(g);
       if (st.kind !== 'points') continue;
 
@@ -261,8 +297,11 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, getTheme
       let hidden = false;
       for (const g of groups) {
         if (!g.idx.includes(hi)) continue;
-        const isDrillGroup = g.idx.some(idx => pts[idx].drill);
-        if (isDrillGroup && !highlighted.drill) hidden = true;
+        if (isStreamHidden(g, L)) hidden = true;
+        else {
+          const isDrillGroup = g.idx.some(idx => pts[idx].drill);
+          if (isDrillGroup && !highlighted.drill) hidden = true;
+        }
         break;
       }
 
@@ -365,7 +404,10 @@ export function createRender2d({ canvas: cv, getLayers, getLabelConfig, getTheme
     let best = null, bd = 18;
     for (const L of dataLayers()) {
       if (L.locked) continue;
-      for (const p of L.pts) {
+      const skip = hiddenPtIdx(L);
+      for (let i = 0; i < L.pts.length; i++) {
+        if (skip.has(i)) continue;
+        const p = L.pts[i];
         const [sx, sy] = toScreen(p);
         const d = Math.hypot(sx - cx, sy - cy);
         if (d < bd) { bd = d; best = p; }
