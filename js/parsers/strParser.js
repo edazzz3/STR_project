@@ -17,6 +17,7 @@ export const STYLES = {
   503: { kind: 'points', color: '#000000', size: 1, labelField: 'z' },
   202: { kind: 'line',   color: '#000000', width: 2 },
   203: { kind: 'line',   color: '#000000', width: 1 },
+  211: { kind: 'line',   color: '#a0522d', width: 1 },
   465: { kind: 'line',   color: '#ff0000', width: 2, centerD: 4 },
   467: { kind: 'line',   color: '#0000cc', width: 2, centerD: 4 },
 
