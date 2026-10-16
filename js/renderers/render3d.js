@@ -86,6 +86,14 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
   controls.zoomSpeed = 0.8;
   controls.panSpeed = 0.6;
 
+  // Адаптивная скорость зума: у мыши deltaY большое (100+),
+  // у тачпада — маленькое (1–10). OrbitControls умножает zoomSpeed
+  // на deltaY, поэтому для тачпада поднимаем коэффициент.
+  canvas.addEventListener('wheel', e => {
+    const mag = Math.abs(e.deltaY);
+    controls.zoomSpeed = mag >= 50 ? 0.8 : 15.0;
+  }, { capture: true });
+
   const content = new THREE.Group();
   scene.add(content);
   const measureGroup = new THREE.Group();

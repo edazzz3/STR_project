@@ -42,6 +42,23 @@ export function createInput({ canvas, getScale, onPan, onPinch, onWheelZoom, onT
 
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
-    onWheelZoom(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
+
+    // Нормализуем deltaY: на разных платформах/устройствах — своя шкала.
+    let d = e.deltaY;
+    if (e.deltaMode === 1) d *= 16;   // строки → пиксели
+    else if (e.deltaMode === 2) d *= 100; // страницы → пиксели
+
+    // Адаптивный шаг:
+    //   мышь (|d| большое, обычно 100+)   → шаг 0.15 (как было)
+    //   тачпад (|d| маленькое, обычно 1–10) → шаг 0.03 (мягко)
+    const mag = Math.abs(d);
+    let step;
+    if (mag >= 50) step = 0.15;
+    else if (mag >= 20) step = 0.08;
+    else if (mag >= 5) step = 0.06;
+    else step = 0.025;
+
+    const factor = d < 0 ? 1 + step : 1 - step;
+    onWheelZoom(e.clientX, e.clientY, factor);
   }, { passive: false });
 }
