@@ -35,15 +35,15 @@ function adaptColor(c, theme) {
 
 function styleFor(g, theme) {
   let st;
-  if (g.id === 'txt') {
-    if (g.code === 'vb') st = TXT_VB_STYLE;
-    else if (g.code === 'nb') st = TXT_NB_STYLE;
-    else if (g.code === 'otm') st = TXT_OTM_STYLE;
-    else st = g.kind === 'line' ? TXT_LINE_STYLE : TXT_POINTS_STYLE;
-  } else if (STYLES[g.id]) {
+  if (STYLES[g.id]) {
     st = STYLES[g.id];
   } else {
-    st = DEFAULT_STYLE;
+    // Всё, что не в STYLES (zav, txt, произвольные описания) — как TXT
+    st = g.kind === 'line' ? TXT_LINE_STYLE : TXT_POINTS_STYLE;
+  }
+  // Одиночная vb/nb точка: группа points, но стиль от стринга «line».
+  if (g.kind === 'points' && st.kind === 'line') {
+    st = { kind: 'points', color: st.color, size: 3 };
   }
   if (theme === 'dark' && st.color) {
     return { ...st, color: adaptColor(st.color, theme) };
