@@ -43,8 +43,8 @@ function styleFor(g, theme) {
   }
   // Одиночная vb/nb точка: группа points, но стиль от стринга «line».
   if (g.kind === 'points' && st.kind === 'line') {
-    st = { kind: 'points', color: st.color, size: 3 };
-  }
+    st = { kind: 'points', color: st.color, size: 1 + (st.width || 1) };
+}
   if (theme === 'dark' && st.color) {
     return { ...st, color: adaptColor(st.color, theme) };
   }

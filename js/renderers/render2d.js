@@ -117,8 +117,11 @@ export function createRender2d({
     // Если группа — points, но стиль от стринга «line» (одиночная точка vb/nb),
     // рисуем точками того же цвета.
     if (g.kind === 'points' && st.kind === 'line') {
-      st = { kind: 'points', color: st.color, size: 3 };
-    }
+    // width используется для толщины линии; при показе точкой
+    // масштабируем её в размер (VB width=2 → size=3, NB width=1 → size=2)
+    st = { kind: 'points', color: st.color, size: 1 + (st.width || 1) };
+}
+    
     const theme = themeNow();
     if (theme === 'dark' && st.color) {
       return { ...st, color: adaptColor(st.color, theme) };
