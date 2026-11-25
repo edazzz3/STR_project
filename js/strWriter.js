@@ -71,6 +71,7 @@ function hasAnyValues(values) {
 export function buildStrContent({ layer, data }) {
   const out = [];
   out.push(layer.header || '');
+  out.push('0, 0.000, 0.000, 0.000,'); // Закрываем пустой стринг перед началом данных
 
   const surveyedIds = new Set();
   for (const [key, values] of Object.entries(data || {})) {
@@ -146,9 +147,11 @@ export function buildStrContent({ layer, data }) {
 /** Скачивает .str-файл. */
 export function downloadStrFile({ layer, data }) {
   const content = buildStrContent({ layer, data });
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  // application/octet-stream предотвращает добавление .txt браузером
+  const blob = new Blob([content], { type: 'application/octet-stream' });
 
-  const base = (layer.name || 'str').replace(/\.[^.]+$/, '');
+  // Убираем .str и/или .txt в конце, чтобы не было двойных расширений
+  const base = (layer.name || 'str').replace(/(\.str|\.txt)+$/i, '');
   const outName = `${base}_промер.str`;
 
   const url = URL.createObjectURL(blob);
