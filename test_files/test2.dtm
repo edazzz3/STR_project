@@ -1,0 +1,13 @@
+test2.str,0000047800;algorithm=standard;fields=x,y
+1, 0.493, -0.808, 0.000, 
+1, 0.501, 0.708, 0.000, 
+1, -0.753, 0.664, 0.000, 
+1, -0.733, -0.857, 0.000, 
+1, 0.493, -0.808, 0.000, 
+0, 0.000, 0.000, 0.000,
+0, 0.000, 0.000, 0.000, END
+OBJECT, 1, 
+TRISOLATION, 1, neighbours=yes,validated=true,closed=no,algorithm=retriangulation
+1, 3, 2, 1, 0, 0, 2, 
+2, 4, 3, 1, 0, 1, 0, 
+END
