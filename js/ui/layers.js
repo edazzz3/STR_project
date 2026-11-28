@@ -1,7 +1,7 @@
 // UI панели слоёв: список слоёв, видимость, блокировка, удаление.
 import { state } from '../state.js';
 
-export function createLayersPanel({ container, onChange }) {
+export function createLayersPanel({ container, onChange, onDtmOpacity }) {
   const sidebar = container;
   const header = sidebar.querySelector('.sidebar-header');
   const body = sidebar.querySelector('.sidebar-body');
@@ -90,6 +90,45 @@ export function createLayersPanel({ container, onChange }) {
       row.append(eye, del);
       body.appendChild(row);
     }
+
+    // Общий ползунок прозрачности .dtm — показываем, если есть хотя бы один такой слой.
+    if (state.layers.some(L => L.kind === 'dtm')) {
+      body.appendChild(buildDtmOpacityRow());
+    }
+  }
+
+  /** Компактный ползунок прозрачности поверхностей .dtm (0..1). */
+  function buildDtmOpacityRow() {
+    const row = document.createElement('div');
+    row.className = 'dtm-opacity';
+
+    const label = document.createElement('span');
+    label.className = 'dtm-opacity-label';
+    label.textContent = 'DTM';
+
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.min = '0';
+    range.max = '1';
+    range.step = '0.05';
+    range.value = String(state.dtmOpacity);
+    range.className = 'dtm-opacity-range';
+    range.title = 'Прозрачность поверхностей DTM';
+
+    const pct = document.createElement('span');
+    pct.className = 'dtm-opacity-pct';
+    pct.textContent = Math.round(state.dtmOpacity * 100) + '%';
+
+    range.addEventListener('input', () => {
+      const v = Math.min(1, Math.max(0, +range.value));
+      state.dtmOpacity = v;
+      pct.textContent = Math.round(v * 100) + '%';
+      // Обновляем материалы напрямую, без пересборки 3D и сброса камеры.
+      onDtmOpacity && onDtmOpacity(v);
+    });
+
+    row.append(label, range, pct);
+    return row;
   }
 
   render();

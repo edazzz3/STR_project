@@ -85,7 +85,6 @@ export function createRender2d({
   const allLayers = () => getLayers() || [];
   const pdfLayers = () => allLayers().filter(L => L.kind === 'pdf' && L.visible && L.affine);
   const dataLayers = () => allLayers().filter(L => (L.kind === 'str' || L.kind === 'txt') && L.visible);
-  const dtmLayers = () => allLayers().filter(L => L.kind === 'dtm' && L.visible && L.resolved);
 
   /** Скрыт ли стринг g в слое L? На заблокированных слоях — никогда. */
   function isStreamHidden(g, L) {
@@ -162,13 +161,7 @@ export function createRender2d({
         mny = Math.min(mny, p.y); mxy = Math.max(mxy, p.y);
       }
     }
-    // Поверхности .dtm учитываем в границах, чтобы fit() работал без .str.
-    for (const L of dtmLayers()) {
-      for (const p of L.pts) {
-        mnx = Math.min(mnx, p.x); mxx = Math.max(mxx, p.x);
-        mny = Math.min(mny, p.y); mxy = Math.max(mxy, p.y);
-      }
-    }
+    // .dtm отображается только в 3D, поэтому в границы 2D не входит.
     if (mnx === Infinity) return null;
     return { minX: mnx, maxX: mxx, minY: mny, maxY: mxy };
   }
@@ -226,54 +219,6 @@ export function createRender2d({
     ctx.globalAlpha = 0.85;
     ctx.drawImage(L.canvas, 0, 0);
     ctx.restore();
-  }
-
-  /** Цвет из CSS-переменной (для совместимости с темами). */
-  function cssVar(name, fallback) {
-    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return v || fallback;
-  }
-
-  /** Поверхность .dtm: полупрозрачная заливка + тонкие рёбра. */
-  function drawDtmLayer(L) {
-    if (!L.pts || !L.triangles || !L.triangles.length) return;
-    const theme = themeNow();
-    const fill = theme === 'dark' ? 'rgba(96, 165, 250, 0.18)' : 'rgba(37, 99, 235, 0.14)';
-    const edge = adaptColor(cssVar('--accent-1', '#2563eb'), theme);
-
-    // Заливка треугольников.
-    ctx.fillStyle = fill;
-    for (const tri of L.triangles) {
-      const [i1, i2, i3] = tri.v;
-      const p1 = L.pts[i1], p2 = L.pts[i2], p3 = L.pts[i3];
-      if (!p1 || !p2 || !p3) continue;
-      const [x1, y1] = toScreen(p1);
-      const [x2, y2] = toScreen(p2);
-      const [x3, y3] = toScreen(p3);
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.lineTo(x3, y3);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // Тонкие рёбра.
-    ctx.strokeStyle = edge;
-    ctx.lineWidth = 0.6;
-    ctx.beginPath();
-    for (const tri of L.triangles) {
-      const [i1, i2, i3] = tri.v;
-      const p1 = L.pts[i1], p2 = L.pts[i2], p3 = L.pts[i3];
-      if (!p1 || !p2 || !p3) continue;
-      const [x1, y1] = toScreen(p1);
-      const [x2, y2] = toScreen(p2);
-      const [x3, y3] = toScreen(p3);
-      ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-      ctx.moveTo(x2, y2); ctx.lineTo(x3, y3);
-      ctx.moveTo(x3, y3); ctx.lineTo(x1, y1);
-    }
-    ctx.stroke();
   }
 
   function drawLayer(L) {
@@ -455,8 +400,7 @@ export function createRender2d({
       drawPdfLayer(L);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
-    // Поверхности .dtm — поверх PDF, но под .str/.txt.
-    for (const L of dtmLayers()) drawDtmLayer(L);
+    // .dtm отображается только в 3D — в 2D не рисуем.
     for (const L of dataLayers()) drawLayer(L);
 
     drawMeasure();

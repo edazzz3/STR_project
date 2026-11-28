@@ -435,6 +435,28 @@ label.switch input:checked + .track::after {
   border: 1px solid color-mix(in srgb, var(--accent-1) 30%, transparent);
 }
 
+/* ── Ползунок прозрачности .dtm ──────────────────── */
+.dtm-opacity {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px; color: var(--toolbar-text);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.dtm-opacity-label {
+  flex: 0 0 auto; font-weight: 700; letter-spacing: .04em;
+  color: var(--toolbar-text-dim);
+}
+.dtm-opacity-range {
+  flex: 1 1 auto; min-width: 0; height: 4px;
+  accent-color: var(--accent-1);
+  cursor: pointer;
+}
+.dtm-opacity-pct {
+  flex: 0 0 auto; min-width: 34px; text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--toolbar-text-dim);
+}
+
 /* ── Модалки ─────────────────────────────────────── */
 #fieldsModal, #streamsModal, #georefModal, #pdfPagesModal, #surveyModal, #surveyInfoModal {
   position: fixed; inset: 0; z-index: 20;

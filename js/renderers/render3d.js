@@ -65,7 +65,7 @@ function makeCircleTexture() {
   return tex;
 }
 
-export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
+export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams, getDtmOpacity }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   const scene = new THREE.Scene();
@@ -105,6 +105,15 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
   let active = false;
   const circleTex = makeCircleTexture();
 
+  // Материалы поверхностей .dtm — для мгновенного изменения прозрачности
+  // без пересборки геометрии и сброса камеры.
+  const dtmSurfaceMats = [];
+  const dtmWireMats = [];
+  const dtmOpacityNow = () => {
+    const v = getDtmOpacity ? +getDtmOpacity() : 0.35;
+    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.35;
+  };
+
   /** Цвет из CSS-переменной (для совместимости с темами). */
   function cssVar(name, fallback) {
     const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -130,27 +139,30 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
     geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geom.computeVertexNormals();
 
+    const opacity = dtmOpacityNow();
     const surfaceColor = adaptColor(cssVar('--accent-1', '#2563eb'), theme);
     const mat = new THREE.MeshStandardMaterial({
       color: surfaceColor,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.35,
+      opacity,
       flatShading: true,
       depthWrite: false,
       roughness: 0.9,
       metalness: 0.0,
     });
     content.add(new THREE.Mesh(geom, mat));
+    dtmSurfaceMats.push(mat);
 
     // Рёбра: WireframeGeometry, чтобы грани были видны и на плоских Z=0.
     const wireGeom = new THREE.WireframeGeometry(geom);
     const wireMat = new THREE.LineBasicMaterial({
       color: adaptColor(cssVar('--accent-2', '#6366f1'), theme),
       transparent: true,
-      opacity: 0.6,
+      opacity,
     });
     content.add(new THREE.LineSegments(wireGeom, wireMat));
+    dtmWireMats.push(wireMat);
   }
 
   const themeNow = () => (getTheme ? getTheme() : 'light');
@@ -363,6 +375,15 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
         else o.material.dispose && o.material.dispose();
       }
     }
+    dtmSurfaceMats.length = 0;
+    dtmWireMats.length = 0;
+  }
+
+  /** Мгновенно меняет прозрачность заливки и рёбер .dtm без пересборки. */
+  function setDtmOpacity(v) {
+    const opacity = Math.min(1, Math.max(0, +v || 0));
+    for (const m of dtmSurfaceMats) m.opacity = opacity;
+    for (const m of dtmWireMats) m.opacity = opacity;
   }
 
   function build(layers, { preserveCamera = false } = {}) {
@@ -482,7 +503,7 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
   }
 
   return {
-    build, resize, setView, setMeasureMode,
+    build, resize, setView, setMeasureMode, setDtmOpacity,
     isMeasureActive: () => measureActive,
     startPivot: pivot.start,
     cancelPivot: pivot.cancel,

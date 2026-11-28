@@ -8,6 +8,8 @@
 //   { fields: [] } → ничего не показывать.
 // hiddenStreams — Set строковых ID стрингов, скрытых пользователем.
 //   Не действует на заблокированные слои (у них всё видно всегда).
+// dtmOpacity — общая прозрачность поверхностей .dtm в 3D (0..1).
+//   Применяется и к заливке, и к рёбрам (wireframe).
 export const state = {
   layers: [],
   activeId: null,
@@ -15,4 +17,5 @@ export const state = {
   labelConfig: {},
   hiddenStreams: new Set(),
   theme: 'light',
+  dtmOpacity: 0.35,
 };
