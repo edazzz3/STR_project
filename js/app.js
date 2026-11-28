@@ -61,8 +61,8 @@ const r2 = createRender2d({
 const layersPanel = createLayersPanel({
   container: $('sidebar'),
   onChange: () => redraw(false),
-  // Ползунок прозрачности .dtm: обновляем материалы напрямую, без пересборки 3D.
-  onDtmOpacity: v => { if (r3) r3.setDtmOpacity(v); },
+  // Цвет/прозрачность конкретного .dtm: обновляем материал напрямую, без пересборки 3D.
+  onDtmStyle: layer => { if (r3) r3.setDtmLayerStyle(layer); },
 });
 
 const fieldsModal = createFieldsModal({
@@ -178,7 +178,6 @@ async function get3d() {
       onInfo: setInfo,
       getTheme: () => state.theme,
       getHiddenStreams: () => state.hiddenStreams,
-      getDtmOpacity: () => state.dtmOpacity,
     });
   }
   return r3;

@@ -8,6 +8,22 @@ const MAX_LAYERS = 10;
 let uid = 0;
 const newLayerId = () => 'L' + (++uid) + '_' + Date.now();
 
+// Палитра контрастных цветов для поверхностей .dtm.
+// Цвета подбираются по кругу, чтобы несколько .dtm сразу отличались.
+const DTM_PALETTE = [
+  '#2563eb', // синий
+  '#16a34a', // зелёный
+  '#ea580c', // оранжевый
+  '#9333ea', // фиолетовый
+  '#0891b2', // бирюзовый
+  '#db2777', // розовый
+  '#ca8a04', // жёлто-коричневый
+  '#dc2626', // красный
+];
+let dtmColorCursor = 0;
+const nextDtmColor = () => DTM_PALETTE[dtmColorCursor++ % DTM_PALETTE.length];
+const DEFAULT_DTM_OPACITY = 0.6;
+
 /** basename в lower-case для сопоставления .dtm ↔ .str. */
 function baseName(name) {
   return (String(name || '').split(/[\\/]/).pop() || '').toLowerCase();
@@ -153,6 +169,9 @@ export function createImportHandler({
             visible: true, locked: false,
             resolved: false, waitingFor: baseName(parsed.strName),
             pts: [], triangles: parsed.triangles, boundary: parsed.boundary,
+            // Индивидуальные цвет и прозрачность поверхности этого .dtm.
+            color: nextDtmColor(),
+            opacity: DEFAULT_DTM_OPACITY,
           };
           const target = state.layers.find(
             L => L.kind === 'str' && baseName(L.name) === baseName(parsed.strName)

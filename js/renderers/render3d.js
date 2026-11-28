@@ -65,7 +65,7 @@ function makeCircleTexture() {
   return tex;
 }
 
-export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams, getDtmOpacity }) {
+export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   const scene = new THREE.Scene();
@@ -105,14 +105,9 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams, get
   let active = false;
   const circleTex = makeCircleTexture();
 
-  // Материалы поверхностей .dtm — для мгновенного изменения прозрачности
-  // без пересборки геометрии и сброса камеры.
-  const dtmSurfaceMats = [];
-  const dtmWireMats = [];
-  const dtmOpacityNow = () => {
-    const v = getDtmOpacity ? +getDtmOpacity() : 0.35;
-    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.35;
-  };
+  // Материалы поверхностей .dtm по id слоя — для мгновенного изменения
+  // цвета и прозрачности без пересборки геометрии и сброса камеры.
+  const dtmMats = new Map();
 
   /** Цвет из CSS-переменной (для совместимости с темами). */
   function cssVar(name, fallback) {
@@ -120,7 +115,19 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams, get
     return v || fallback;
   }
 
-  /** Меш поверхности .dtm + wireframe-рёбра. */
+  /** Нормализует прозрачность слоя .dtm в диапазон 0..1. */
+  function dtmOpacityOf(L) {
+    const v = L && L.opacity != null ? +L.opacity : 0.6;
+    return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.6;
+  }
+
+  /** Цвет поверхности слоя .dtm с учётом темы. */
+  function dtmColorOf(L, theme) {
+    const base = (L && L.color) || cssVar('--accent-1', '#2563eb');
+    return adaptColor(base, theme);
+  }
+
+  /** Меш поверхности .dtm (без рёбер). */
   function buildDtmMesh(L, v, theme) {
     if (!L.resolved || !L.pts || !L.triangles || !L.triangles.length) return;
     const positions = [];
@@ -139,30 +146,18 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams, get
     geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geom.computeVertexNormals();
 
-    const opacity = dtmOpacityNow();
-    const surfaceColor = adaptColor(cssVar('--accent-1', '#2563eb'), theme);
     const mat = new THREE.MeshStandardMaterial({
-      color: surfaceColor,
+      color: dtmColorOf(L, theme),
       side: THREE.DoubleSide,
       transparent: true,
-      opacity,
+      opacity: dtmOpacityOf(L),
       flatShading: true,
       depthWrite: false,
       roughness: 0.9,
       metalness: 0.0,
     });
     content.add(new THREE.Mesh(geom, mat));
-    dtmSurfaceMats.push(mat);
-
-    // Рёбра: WireframeGeometry, чтобы грани были видны и на плоских Z=0.
-    const wireGeom = new THREE.WireframeGeometry(geom);
-    const wireMat = new THREE.LineBasicMaterial({
-      color: adaptColor(cssVar('--accent-2', '#6366f1'), theme),
-      transparent: true,
-      opacity,
-    });
-    content.add(new THREE.LineSegments(wireGeom, wireMat));
-    dtmWireMats.push(wireMat);
+    dtmMats.set(L.id, mat);
   }
 
   const themeNow = () => (getTheme ? getTheme() : 'light');
@@ -375,15 +370,20 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams, get
         else o.material.dispose && o.material.dispose();
       }
     }
-    dtmSurfaceMats.length = 0;
-    dtmWireMats.length = 0;
+    dtmMats.clear();
   }
 
-  /** Мгновенно меняет прозрачность заливки и рёбер .dtm без пересборки. */
-  function setDtmOpacity(v) {
-    const opacity = Math.min(1, Math.max(0, +v || 0));
-    for (const m of dtmSurfaceMats) m.opacity = opacity;
-    for (const m of dtmWireMats) m.opacity = opacity;
+  /**
+   * Мгновенно обновляет цвет и прозрачность поверхности конкретного .dtm
+   * без пересборки геометрии и сброса камеры.
+   */
+  function setDtmLayerStyle(L) {
+    if (!L) return;
+    const mat = dtmMats.get(L.id);
+    if (!mat) return;
+    mat.color.set(dtmColorOf(L, themeNow()));
+    mat.opacity = dtmOpacityOf(L);
+    mat.needsUpdate = true;
   }
 
   function build(layers, { preserveCamera = false } = {}) {
@@ -503,7 +503,7 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams, get
   }
 
   return {
-    build, resize, setView, setMeasureMode, setDtmOpacity,
+    build, resize, setView, setMeasureMode, setDtmLayerStyle,
     isMeasureActive: () => measureActive,
     startPivot: pivot.start,
     cancelPivot: pivot.cancel,
