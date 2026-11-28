@@ -1,11 +1,51 @@
 // Импорт файлов: определение типа по расширению, парсинг, добавление в state.layers.
 import { parseStr } from '../parsers/strParser.js';
 import { parseTxt } from '../parsers/txtParser.js';
+import { parseDtm } from '../parsers/dtmParser.js';
 import { loadPdf } from '../parsers/pdfOverlay.js';
 
 const MAX_LAYERS = 10;
 let uid = 0;
 const newLayerId = () => 'L' + (++uid) + '_' + Date.now();
+
+/** basename в lower-case для сопоставления .dtm ↔ .str. */
+function baseName(name) {
+  return (String(name || '').split(/[\\/]/).pop() || '').toLowerCase();
+}
+
+/**
+ * Материализует вершины .dtm из парного .str по 1-based таблице records.
+ * После этого слой .dtm автономен: копирует {x,y,z} и переводит индексы
+ * треугольников в локальные 0-based.
+ */
+function materializeDtm(dtmLayer, strLayer) {
+  const records = strLayer.records || [];
+  const pts = [];
+  const map = new Map(); // индекс в strLayer.pts → локальный индекс в dtmLayer.pts
+  const triangles = [];
+  for (const tri of dtmLayer.triangles) {
+    const local = [];
+    let ok = true;
+    for (const v of tri.v) {
+      const pi = records[v - 1];
+      if (pi == null || !strLayer.pts[pi]) { ok = false; break; }
+      let li = map.get(pi);
+      if (li == null) {
+        const p = strLayer.pts[pi];
+        li = pts.length;
+        pts.push({ x: p.x, y: p.y, z: p.z });
+        map.set(pi, li);
+      }
+      local.push(li);
+    }
+    if (!ok) continue;
+    triangles.push({ id: tri.id, v: local, n: tri.n });
+  }
+  dtmLayer.pts = pts;
+  dtmLayer.triangles = triangles;
+  dtmLayer.resolved = true;
+  dtmLayer.strLayerId = strLayer.id;
+}
 
 /** Чтение файла: UTF-8, при ошибке — Windows-1251. */
 export async function readText(file) {
@@ -17,9 +57,15 @@ export async function readText(file) {
 /** Сводка по текущим слоям для статус-строки. */
 export function summary(state) {
   if (!state.layers.length) return 'Нет слоёв. Нажмите «Импорт» для загрузки.';
-  const parts = state.layers.map(L => L.kind === 'pdf'
-    ? `PDF: ${L.name}${L.pageNum ? ` (лист ${L.pageNum})` : ''}`
-    : `${L.name}: точек ${L.pts.length}, линий ${L.groups.length}`);
+  const parts = state.layers.map(L => {
+    if (L.kind === 'pdf') return `PDF: ${L.name}${L.pageNum ? ` (лист ${L.pageNum})` : ''}`;
+    if (L.kind === 'dtm') {
+      return L.resolved
+        ? `DTM: ${L.name} (${L.triangles.length} треуг.)`
+        : `DTM: ${L.name} (ожидает ${L.waitingFor})`;
+    }
+    return `${L.name}: точек ${L.pts.length}, линий ${L.groups.length}`;
+  });
   return parts.join(' | ') + '. Нажмите на точку, чтобы увидеть данные.';
 }
 
@@ -34,7 +80,13 @@ export function createImportHandler({
   reset3dPivot,
 }) {
   async function handleFiles(fileList, opts = {}) {
-    const files = [...fileList];
+    // .str обрабатываем раньше .dtm, чтобы при одновременном выборе .dtm сразу нашёл пару.
+    const rank = e => (e === 'str' ? 0 : e === 'dtm' ? 2 : 1);
+    const files = [...fileList].sort((a, b) => {
+      const ea = (a.name.split('.').pop() || '').toLowerCase();
+      const eb = (b.name.split('.').pop() || '').toLowerCase();
+      return rank(ea) - rank(eb);
+    });
     if (!files.length) return;
     const swap = !!opts.swap;
     const drawLine = !!opts.drawLine;
@@ -79,12 +131,34 @@ export function createImportHandler({
         } else if (ext === 'str') {
           const text = await readText(f);
           const parsed = parseStr(text, false);
-          state.layers.push({
+          const layer = {
             id: newLayerId(), kind: 'str', name: f.name,
             visible: true, locked: false,
             pts: parsed.pts, groups: parsed.groups,
             header: parsed.header,
-          });
+            records: parsed.records,
+          };
+          state.layers.push(layer);
+          // Резолвим ожидающие .dtm, которые ждали именно этот .str.
+          for (const L of state.layers) {
+            if (L.kind === 'dtm' && !L.resolved && L.waitingFor === baseName(f.name)) {
+              materializeDtm(L, layer);
+            }
+          }
+        } else if (ext === 'dtm') {
+          const text = await readText(f);
+          const parsed = parseDtm(text, false);
+          const layer = {
+            id: newLayerId(), kind: 'dtm', name: f.name,
+            visible: true, locked: false,
+            resolved: false, waitingFor: baseName(parsed.strName),
+            pts: [], triangles: parsed.triangles, boundary: parsed.boundary,
+          };
+          const target = state.layers.find(
+            L => L.kind === 'str' && baseName(L.name) === baseName(parsed.strName)
+          );
+          if (target) materializeDtm(layer, target);
+          state.layers.push(layer);
         } else if (ext === 'dwg' || ext === 'dxf') {
           lastErr = `«${f.name}»: формат не поддерживается`;
         } else {

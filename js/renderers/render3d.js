@@ -78,6 +78,10 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
   const sun = new THREE.DirectionalLight(0xffffff, 0.6);
   sun.position.set(1, 2, 1);
   scene.add(sun);
+  // HemisphereLight нужен для MeshStandardMaterial (.dtm), иначе меш будет чёрным.
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+  hemi.position.set(0, 1, 0);
+  scene.add(hemi);
 
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
@@ -100,6 +104,54 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
   scene.add(measureGroup);
   let active = false;
   const circleTex = makeCircleTexture();
+
+  /** Цвет из CSS-переменной (для совместимости с темами). */
+  function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+
+  /** Меш поверхности .dtm + wireframe-рёбра. */
+  function buildDtmMesh(L, v, theme) {
+    if (!L.resolved || !L.pts || !L.triangles || !L.triangles.length) return;
+    const positions = [];
+    for (const tri of L.triangles) {
+      const [i1, i2, i3] = tri.v;
+      const p1 = L.pts[i1], p2 = L.pts[i2], p3 = L.pts[i3];
+      if (!p1 || !p2 || !p3) continue;
+      for (const p of [p1, p2, p3]) {
+        const q = v(p);
+        positions.push(q.x, q.y, q.z);
+      }
+    }
+    if (!positions.length) return;
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geom.computeVertexNormals();
+
+    const surfaceColor = adaptColor(cssVar('--accent-1', '#2563eb'), theme);
+    const mat = new THREE.MeshStandardMaterial({
+      color: surfaceColor,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.35,
+      flatShading: true,
+      depthWrite: false,
+      roughness: 0.9,
+      metalness: 0.0,
+    });
+    content.add(new THREE.Mesh(geom, mat));
+
+    // Рёбра: WireframeGeometry, чтобы грани были видны и на плоских Z=0.
+    const wireGeom = new THREE.WireframeGeometry(geom);
+    const wireMat = new THREE.LineBasicMaterial({
+      color: adaptColor(cssVar('--accent-2', '#6366f1'), theme),
+      transparent: true,
+      opacity: 0.6,
+    });
+    content.add(new THREE.LineSegments(wireGeom, wireMat));
+  }
 
   const themeNow = () => (getTheme ? getTheme() : 'light');
   const hiddenNow = () => (getHiddenStreams ? getHiddenStreams() : null);
@@ -328,8 +380,8 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
 
     // Центр считаем по ВСЕМ точкам (включая скрытые слои и скрытые стринги),
     // чтобы при переключении видимости мир не смещался.
-    const allLayers = layers.filter(L => L.kind === 'str' || L.kind === 'txt');
-    const allPts = allLayers.flatMap(L => L.pts);
+    const allLayers = layers.filter(L => L.kind === 'str' || L.kind === 'txt' || L.kind === 'dtm');
+    const allPts = allLayers.flatMap(L => L.pts || []);
     if (!allPts.length) return;
 
     let sx = 0, sy = 0, sz = 0;
@@ -342,6 +394,7 @@ export function createRender3d({ canvas, onInfo, getTheme, getHiddenStreams }) {
     // Строим ТОЛЬКО видимые слои (скрытые не попадают в сцену).
     for (const L of allLayers) {
       if (!L.visible) continue;
+      if (L.kind === 'dtm') { buildDtmMesh(L, v, theme); continue; }
       const { pts, groups } = L;
       for (const g of groups) {
         if (isStreamHidden(g, L)) continue;

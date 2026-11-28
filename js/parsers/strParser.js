@@ -110,29 +110,51 @@ function computeDrill(p) {
 }
 
 /**
+ * Служебная строка осей Surpac: `0, 0.000, ...` (id=0 и 6 нулевых полей).
+ * Она не входит в 1-based таблицу записей, используемую .dtm.
+ */
+function isAxisLine(line) {
+  if (!line) return false;
+  const f = line.split(',').map(s => s.trim());
+  if (f.length < 7) return false;
+  if (parseInt(f[0], 10) !== 0) return false;
+  for (let i = 1; i < f.length; i++) {
+    if (f[i] === '') continue;
+    if (parseFloat(f[i]) !== 0) return false;
+  }
+  return true;
+}
+
+/**
  * @param {string} text  содержимое файла
  * @param {boolean} swap поменять X/Y
- * @returns {{pts: Array, groups: Array}}
+ * @returns {{pts: Array, groups: Array, header: string, records: Array<number|null>, recordCount: number}}
  *   pts:    {id, x, y, z, d:[D1,...], drill?: {az, dip, depth, actual, end}}
  *   groups: подряд идущие записи с одним номером стринга {id, idx[], text?, center?}
+ *   records: 1-based таблица записей .str; records[k-1] = индекс в pts | null (разделитель).
+ *            Нужна для материализации вершин .dtm. Пустые строки слот не занимают.
  */
 export function parseStr(text, swap = false) {
-  const pts = [], groups = [];
+  const pts = [], groups = [], records = [];
   let cur = null;
   const lines = text.split(/\r?\n/);
   const header = lines[0] || '';
-  for (let n = 1; n < lines.length; n++) {          // строка 0 — заголовок файла
-    const f = lines[n].split(',').map(s => s.trim());
-    if (f.length < 4) continue;
+  // Строка 0 — заголовок, строка 1 — служебная ось (если есть). Записи начинаются после них.
+  const start = isAxisLine(lines[1]) ? 2 : 1;
+  for (let n = start; n < lines.length; n++) {
+    const raw = lines[n];
+    if (!raw || !raw.trim()) continue;               // пустые строки не занимают слот
+    const f = raw.split(',').map(s => s.trim());
     const id = parseInt(f[0], 10);
-    if (isNaN(id)) continue;
-    if (id === 0) { cur = null; continue; }          // 0 = конец стринга
+    if (f.length < 4 || isNaN(id)) { records.push(null); continue; }
+    if (id === 0) { cur = null; records.push(null); continue; } // 0 = конец стринга / разделитель
     const a = parseFloat(f[1]), b = parseFloat(f[2]), z = parseFloat(f[3]);
-    if (isNaN(a) || isNaN(b) || isNaN(z)) continue;
+    if (isNaN(a) || isNaN(b) || isNaN(z)) { records.push(null); continue; }
     const x = swap ? a : b;                          // в файле: Y, X, Z
     const y = swap ? b : a;
     if (!cur || cur.id !== id) { cur = { id, idx: [] }; groups.push(cur); }
     cur.idx.push(pts.length);
+    records.push(pts.length);
     pts.push({ id, x, y, z, d: f.slice(4) });        // d[0]=D1 ... d[25]=D26
   }
 
@@ -154,5 +176,5 @@ export function parseStr(text, swap = false) {
     }
   }
 
-  return { pts, groups, header };
+  return { pts, groups, header, records, recordCount: records.length };
 }

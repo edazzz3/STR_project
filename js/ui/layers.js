@@ -44,6 +44,17 @@ export function createLayersPanel({ container, onChange }) {
       name.textContent = layer.name;
       name.title = layer.name;
 
+      // Бейдж DTM: для зарезолвленной поверхности — «DTM», для ожидающей — «DTM · ждёт .str».
+      let badge = null;
+      if (layer.kind === 'dtm') {
+        badge = document.createElement('span');
+        badge.className = 'layer-badge';
+        badge.textContent = layer.resolved ? 'DTM' : 'DTM · ждёт .str';
+        badge.title = layer.resolved
+          ? `Поверхность: ${layer.triangles.length} треуг.`
+          : `Ожидает ${layer.waitingFor}`;
+      }
+
       const eye = document.createElement('span');
       eye.className = 'layer-eye';
       eye.textContent = layer.visible ? '👁' : '🚫';
@@ -74,7 +85,9 @@ export function createLayersPanel({ container, onChange }) {
         onChange && onChange();
       });
 
-      row.append(lock, name, eye, del);
+      row.append(lock, name);
+      if (badge) row.append(badge);
+      row.append(eye, del);
       body.appendChild(row);
     }
   }

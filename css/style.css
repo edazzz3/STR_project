@@ -427,6 +427,13 @@ label.switch input:checked + .track::after {
 .layer-row.locked .layer-lock { color: #fbbf24; }
 .layer-row.hidden-layer { opacity: 0.55; }
 .layer-row .layer-del { color: #f87171; }
+.layer-row .layer-badge {
+  flex: 0 0 auto; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  padding: 1px 5px; border-radius: 6px;
+  color: var(--accent-1);
+  background: color-mix(in srgb, var(--accent-1) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-1) 30%, transparent);
+}
 
 /* ── Модалки ─────────────────────────────────────── */
 #fieldsModal, #streamsModal, #georefModal, #pdfPagesModal, #surveyModal, #surveyInfoModal {
